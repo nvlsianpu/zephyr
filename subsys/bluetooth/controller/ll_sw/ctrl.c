@@ -9170,3 +9170,22 @@ u32_t radio_tx_mem_enqueue(u16_t handle, struct radio_pdu_node_tx *node_tx)
 
 	return 0;
 }
+
+
+void radio_state_abort(void)
+{
+	static void *s_link[2];
+	static struct mayfly s_mfy_radio_abort = {0, 0, s_link,
+		NULL, mayfly_radio_stop};
+	u32_t retval;
+
+	/* Radio state ABORT is supplied in params */
+	s_mfy_radio_abort.param = (void *)STATE_ABORT;
+
+	/* Stop Radio Tx/Rx */
+	retval = mayfly_enqueue(RADIO_TICKER_USER_ID_APP,
+				RADIO_TICKER_USER_ID_WORKER, 0,
+				&s_mfy_radio_abort);
+	LL_ASSERT(!retval);
+}
+

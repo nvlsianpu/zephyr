@@ -35,6 +35,8 @@
 #include <gatt/gap.h>
 #include <gatt/hrs.h>
 
+#include "../../../subsys/bluetooth/controller/ticker/ticker.h"
+
 #define DEVICE_NAME		CONFIG_BLUETOOTH_DEVICE_NAME
 #define DEVICE_NAME_LEN		(sizeof(DEVICE_NAME) - 1)
 #define CHAR_SIZE_MAX           512
@@ -2727,6 +2729,71 @@ static int cmd_bredr_sdp_find_record(int argc, char *argv[])
 }
 #endif
 
+#define FLASH_INTERVAL 1000000UL /* 1 sec */
+#define FLASH_SLOT     100 /* 100 us */
+
+void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
+			void *context)
+{
+	u32_t ticks_now = ticker_ticks_now_get();
+	extern void radio_state_abort(void); /* BLE controller abort intf. */
+
+	printk("flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
+	       ticks_now);
+
+	radio_state_abort();
+
+	/* start a secondary ticker after ~ 500 us, this will let any
+	 * radio role to gracefully release the Radio h/w */
+
+	/* secondary ticker timeout can check and assert if required in case
+	 * radio has not been restored to idle state using radio_is_idle() */
+}
+
+static int cmd_flash(int argc, char *argv[])
+{
+	extern u8_t ll_flash_ticker_id_get(void);
+	u8_t ticker_id = ll_flash_ticker_id_get();
+	u32_t err;
+
+	if ((argc == 2) && !strcmp(argv[1], "off")) {
+		err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+
+		if (err) {
+			printk("Failed to stop ticker.\n");
+		}
+
+		return err;
+	}
+
+	/*
+	u32_t ticker_start(u8_t instance_index, u8_t user_id, u8_t ticker_id,
+		   u32_t ticks_anchor, u32_t ticks_first, u32_t ticks_periodic,
+		   u32_t remainder_periodic, u16_t lazy, u16_t ticks_slot,
+		   ticker_timeout_func ticker_timeout_func, void *context,
+		   ticker_op_func fp_op_func, void *op_context);
+	 */
+
+	err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
+			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
+			   ticker_id, /* flash ticker id */
+			   ticker_ticks_now_get(), /* current tick */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* first int. */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
+			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
+			   0, /* lazy, voluntary skips */
+			   TICKER_US_TO_TICKS(FLASH_SLOT),
+			   flash_timeout_func,
+			   NULL,
+			   NULL, /* no op callback */
+			   NULL);
+	if (err) {
+		printk("Failed to start ticker.\n");
+	}
+
+	return err;
+}
+
 #define HELP_NONE "[none]"
 #define HELP_ADDR_LE "<address: XX:XX:XX:XX:XX:XX> <type: (public|random)>"
 
@@ -2807,6 +2874,7 @@ static const struct shell_cmd commands[] = {
 	{ "br-rfcomm-disconnect", cmd_rfcomm_disconnect, HELP_NONE },
 #endif /* CONFIG_BLUETOOTH_RFCOMM */
 #endif
+	{ "flash", cmd_flash, "[off]" },
 	{ NULL, NULL }
 };
 
