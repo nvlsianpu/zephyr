@@ -42,7 +42,7 @@
 static u8_t MALIGN(4) _rand_context[3 + 4 + 1];
 
 /* memory for ticker nodes/instances */
-#define FLASH_TICKER_NODES 1 /* No. of tickers reserved for flashing */
+#define FLASH_TICKER_NODES 2 /* No. of tickers reserved for flashing */
 #define TICKER_NODES       (RADIO_TICKER_NODES + FLASH_TICKER_NODES)
 static u8_t MALIGN(4) _ticker_nodes[TICKER_NODES][TICKER_NODE_T_SIZE];
 
@@ -51,7 +51,7 @@ static u8_t MALIGN(4) _ticker_users[MAYFLY_CALLER_COUNT]
 						[TICKER_USER_T_SIZE];
 
 /* memory for user/context simultaneous API operations */
-static u8_t MALIGN(4) _ticker_user_ops[RADIO_TICKER_USER_OPS]
+static u8_t MALIGN(4) _ticker_user_ops[RADIO_TICKER_USER_OPS+1]
 						[TICKER_USER_OP_T_SIZE];
 
 /* memory for Bluetooth Controller (buffers, queues etc.) */
@@ -241,7 +241,7 @@ int ll_init(struct k_sem *sem_rx)
 
 u8_t ll_flash_ticker_id_get(void)
 {
-	return (TICKER_NODES - 1); /* last index in the total tickers */
+	return (TICKER_NODES - FLASH_TICKER_NODES); /* The last index in the total tickers */
 }
 
 u8_t *ll_addr_get(u8_t addr_type, u8_t *bdaddr)

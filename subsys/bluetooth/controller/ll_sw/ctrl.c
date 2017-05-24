@@ -9189,3 +9189,7 @@ void radio_state_abort(void)
 	LL_ASSERT(!retval);
 }
 
+u8_t radio_is_stoped(void)
+{
+	return _radio.state;
+}
