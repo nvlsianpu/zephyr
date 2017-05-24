@@ -2732,12 +2732,50 @@ static int cmd_bredr_sdp_find_record(int argc, char *argv[])
 #define FLASH_INTERVAL 1000000UL /* 1 sec */
 #define FLASH_SLOT     100 /* 100 us */
 
+extern u8_t ll_flash_ticker_id_get();
+volatile u32_t timeStamp32;
+
+u8_t radio_is_stoped(void);
+
+void flash_2nd_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
+			void *context)
+{
+	u32_t ticks_now;
+	u32_t err;
+
+	ticks_now = ticker_ticks_now_get();
+
+	printk("flash_2nd_timeout_func: expire= %u, now= %u, parent timeout= %u\n", ticks_at_expire,
+		   ticks_now, timeStamp32);
+
+
+	err = ticker_stop(0, 0, 0, NULL, NULL);
+
+	switch (err) {
+		case TICKER_STATUS_SUCCESS:
+			break;
+
+		case TICKER_STATUS_BUSY:
+			//printk("Stop ticker req. queued.\n");
+			break;
+
+		default:
+			printk("Failed to stop ticker %d.\n",err);
+			break;
+	}
+
+
+	//printk("Radio state %d\n", radio_is_stoped());
+}
+
 static volatile u32_t flash_sync;
+
+
 
 void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			void *context)
 {
-	extern u8_t ll_flash_ticker_id_get(void);
+	extern u8_t ll_flash_ticker_id_get();
 	
 	u32_t ticks_now;
 	u32_t err;
@@ -2749,8 +2787,10 @@ void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			ticks_now = ticker_ticks_now_get();
 			extern void radio_state_abort(void); /* BLE controller abort intf. */
 
-			printk("flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
-				   ticks_now);
+			//printk("flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
+			//	   ticks_now);
+
+		    //printk("Radio state %d\n", radio_is_stoped());
 
 			radio_state_abort();
 
@@ -2758,46 +2798,139 @@ void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			 * radio role to gracefully release the Radio h/w */
 
 			flash_sync++;
+			timeStamp32 = ticks_now;
+
+			err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
+			   	0, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
+			   	0, /* flash ticker id */
+			   	ticks_now/*ticks_at_expire*/, /* current tick */
+				TICKER_US_TO_TICKS(500), /* first int. */
+			   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
+			   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
+			   	0, /* lazy, voluntary skips */
+			   	TICKER_US_TO_TICKS(FLASH_SLOT),
+			   	flash_2nd_timeout_func,
+			   	NULL,
+			   	NULL, /* no op callback */
+			   	NULL);
+			
+			switch (err) {
+				case TICKER_STATUS_SUCCESS:
+					break;
+
+				case TICKER_STATUS_BUSY:
+					//printk("Start 2nd ticker req. queued.\n");
+					break;
+
+				default:
+					printk("Failed to start 2nd ticker %d.\n",err);
+					break;
+			}
+
+			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+
+			switch (err) {
+				case TICKER_STATUS_SUCCESS:
+					break;
+
+				case TICKER_STATUS_BUSY:
+					//printk("Stop ticker req. queued.\n");
+					break;
+
+				default:
+					printk("Failed to stop ticker %d.\n",err);
+					break;
+			}
+
+
+
+			//printk("Radio state %d\n", radio_is_stoped());
+
+			break;
+			
 
 			/*u32_t ticker_update(u8_t instance_index, u8_t user_id, u8_t ticker_id,
 					u16_t ticks_drift_plus, u16_t ticks_drift_minus,
 					u16_t ticks_slot_plus, u16_t ticks_slot_minus, u16_t lazy,
 					u8_t force, ticker_op_func fp_op_func, void *op_context);*/
 
-			err = ticker_update(0, /* Radio instance (can use define from ctrl.h) */
-						3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
-						ticker_id, /* flash ticker id */
-						TICKER_US_TO_TICKS(500), /*u16_t ticks_drift_plus*/
-						0, /* u16_t ticks_drift_minus,*/
-						0, /* u16_t ticks_slot_plus*/
-						0, /* u16_t ticks_slot_minus*/
-						0, /* u16_t lazy*/
-						0/*1*/,/* u8_t force*/
-						NULL, /*ticker_op_func fp_op_func */
-						NULL /*void *op_context*/			  
-				);
+//			err = ticker_update(0, /* Radio instance (can use define from ctrl.h) */
+//						3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
+//						ticker_id, /* flash ticker id */
+//						0,//TICKER_US_TO_TICKS(500), /*u16_t ticks_drift_plus*/
+//						TICKER_US_TO_TICKS(999500), /* u16_t ticks_drift_minus,*/
+//						0, /* u16_t ticks_slot_plus*/
+//						0, /* u16_t ticks_slot_minus*/
+//						0, /* u16_t lazy*/
+//						0/*1*/,/* u8_t force*/
+//						NULL, /*ticker_op_func fp_op_func */
+//						NULL /*void *op_context*/
+//				);
+//
+//			if (err) {
+//				if (TICKER_STATUS_BUSY == err) {
+//					printk("Update ticker req. queued.\n");
+//				} else {
+//					printk("Failed to update ticker %d.\n", err);
+//				}
+//			}
+//
+//			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+//
+//			switch (err) {
+//				case TICKER_STATUS_SUCCESS:
+//					break;
+//
+//				case TICKER_STATUS_BUSY:
+//					printk("Stop 2nd ticker req. queued.\n");
+//					break;
+//
+//				default:
+//					printk("Failed to stop 2nd ticker %d.\n",err);
+//					break;
+//			}
+//
+//			break;
 
-			if (err) {
-				printk("Failed to update ticker.\n");
-			}
-			break;
-			
-		case 1:
-			ticks_now = ticker_ticks_now_get();
-
-			printk("2nd flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
-				   ticks_now);
-			flash_sync++;
-			
-			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
-
-			if (err) {
-				printk("Failed to stop ticker.\n");
-			}
-
-			
-			break;
-		case 2:
+//		case 1:
+//			ticks_now = ticker_ticks_now_get();
+//
+//			printk("2nd flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
+//				   ticks_now);
+//			flash_sync++;
+//
+//			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+//
+//			switch (err) {
+//				case TICKER_STATUS_SUCCESS:
+//					break;
+//
+//				case TICKER_STATUS_BUSY:
+//					printk("Stop ticker req. queued.\n");
+//					break;
+//
+//				default:
+//					printk("Failed to stop ticker %d.\n",err);
+//					break;
+//			}
+//
+//			err = ticker_stop(0, 3, ticker_id + 1, NULL, NULL);
+//
+//			switch (err) {
+//				case TICKER_STATUS_SUCCESS:
+//					break;
+//
+//				case TICKER_STATUS_BUSY:
+//					printk("Stop 2nd ticker req. queued.\n");
+//					break;
+//
+//				default:
+//					printk("Failed to stop 2nd ticker %d.\n",err);
+//					break;
+//			}
+//
+//			break;
+		default:
 			printk("unwanted tick\n");
 			break;
 	}
@@ -2808,14 +2941,10 @@ void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 	 * radio has not been restored to idle state using radio_is_idle() */
 }
 
-void flash_callback(void *context)
-{
-	printk("flash calback\n");
-}
 
 static int cmd_flash(int argc, char *argv[])
 {
-	extern u8_t ll_flash_ticker_id_get(void);
+	extern u8_t ll_flash_ticker_id_get();
 	u8_t ticker_id = ll_flash_ticker_id_get();
 	u32_t err;
 
@@ -2843,8 +2972,7 @@ static int cmd_flash(int argc, char *argv[])
 			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
 			   ticker_id, /* flash ticker id */
 			   ticker_ticks_now_get(), /* current tick */
-			   0, /* first int. */
-			   //TICKER_US_TO_TICKS(FLASH_INTERVAL), /* first int. */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */
 			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
 			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
 			   0, /* lazy, voluntary skips */
