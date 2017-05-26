@@ -109,6 +109,20 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 	return 0;
 }
 
+
+static void base_flash_nrf5_erase(u32_t addr)
+{
+	/* Erase uses a specific configuration register */
+	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
+	nvmc_wait_ready();
+
+	NRF_NVMC->ERASEPAGE = (u32_t)addr;
+	nvmc_wait_ready();
+
+	printk("Erase page %d in timeslot done.\n", addr);
+}
+
+
 static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 {
 	u32_t pg_size = NRF_FICR->CODEPAGESIZE;
@@ -300,3 +314,53 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 	return err;
 }
 
+
+typedef struct {
+	u32_t addr; /* Address off the 1st page to erase */
+	u32_t size; /* Size off area to erase [B] */
+	u8_t  enable_time_limit;
+} erase_context_t;
+
+void erase_op_func(void * context)
+{
+	u32_t ticks_diff;
+	u32_t ticks_begin       = ticker_ticks_now_get();
+	u32_t pg_size           = NRF_FICR->CODEPAGESIZE;
+	erase_context_t * e_ctx = context;
+	u32_t i                 = 0;
+
+	do	{
+		base_flash_nrf5_erase(e_ctx->addr);
+
+		e_ctx->size -= pg_size;
+		e_ctx->addr += pg_size;
+		i++;
+
+		if (e_ctx->enable_time_limit) {
+
+			ticks_diff = ticker_ticks_now_get() - ticks_begin;
+
+			if ((ticks_diff + ticks_diff/i) > FLASH_SLOT) {
+				break;
+			}
+		}
+
+	} while (e_ctx->size > 0);
+}
+
+int erase_in_timeslot(u32_t addr, u32_t size)
+{
+	erase_context_t context = {
+			addr,
+			size,
+			1 /* enable time limit */
+	};
+
+	flash_op_desc_t flash_op_desc = {
+			erase_op_func,
+			&context
+	};
+
+	return work_in_time_slot(&flash_op_desc);
+
+}

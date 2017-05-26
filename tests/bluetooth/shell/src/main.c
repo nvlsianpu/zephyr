@@ -3036,6 +3036,13 @@ static int cmd_flash2(int argc, char *argv[])
 	return err;
 }
 
+extern int erase_in_timeslot(u32_t addr, u32_t size);
+
+static int cmd_erase(int argc, char *argv[])
+{
+	return erase_in_timeslot(0x40000, 0xf000);
+}
+
 #define HELP_NONE "[none]"
 #define HELP_ADDR_LE "<address: XX:XX:XX:XX:XX:XX> <type: (public|random)>"
 
@@ -3118,6 +3125,7 @@ static const struct shell_cmd commands[] = {
 #endif
 	{ "flash", cmd_flash, "[off]" },
 	{ "flash2", cmd_flash2, "[off]" },
+	{ "erase", cmd_erase},
 	{ NULL, NULL }
 };
 
