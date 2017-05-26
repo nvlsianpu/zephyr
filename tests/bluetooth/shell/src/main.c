@@ -538,6 +538,9 @@ static void bt_ready(int err)
 	gap_init(DEVICE_NAME, appearance_value);
 }
 
+// semaphore for synchronization flash opperations.
+static struct k_sem flash_nrf5_sem;
+
 static int cmd_init(int argc, char *argv[])
 {
 	static const struct bt_storage storage = {
@@ -567,6 +570,8 @@ static int cmd_init(int argc, char *argv[])
 	if (err) {
 		printk("Bluetooth init failed (err %d)\n", err);
 	}
+
+	k_sem_init(&flash_nrf5_sem, 0, 1);
 
 	return 0;
 }
@@ -2737,6 +2742,8 @@ volatile u32_t timeStamp32;
 
 u8_t radio_is_stoped(void);
 
+
+
 void flash_2nd_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 			void *context)
 {
@@ -2766,6 +2773,9 @@ void flash_2nd_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 
 
 	//printk("Radio state %d\n", radio_is_stoped());
+
+	/* notify thread that data is available */
+	k_sem_give(&flash_nrf5_sem);
 }
 
 static volatile u32_t flash_sync;
@@ -2985,6 +2995,44 @@ static int cmd_flash(int argc, char *argv[])
 		printk("Failed to start ticker.\n");
 	}
 
+	   printk("Request flash_nrf5.\n");
+	 if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) {
+	        printk("flash_nrf5_sem not available!\n");
+	 } else {
+		   printk("flash_nrf5_sem available.\n");
+	 }
+
+	return err;
+}
+
+
+
+typedef void (*flash_op_handler_t) (void* context);
+
+typedef struct {
+	flash_op_handler_t p_op_handler;
+	void * p_op_context; // [in,out]
+} flash_op_desc_t;
+
+
+int work_in_time_slot(flash_op_desc_t * p_flash_op_desc);
+
+
+void test_op_func(void * context)
+{
+	printk("test value is %d\n", *(u8_t*)context);
+}
+
+static int cmd_flash2(int argc, char *argv[])
+{
+	u8_t context = 23;
+	flash_op_desc_t flash_op_desc = {
+			test_op_func,
+			&context
+	};
+
+	int err = work_in_time_slot(&flash_op_desc);
+
 	return err;
 }
 
@@ -3069,6 +3117,7 @@ static const struct shell_cmd commands[] = {
 #endif /* CONFIG_BLUETOOTH_RFCOMM */
 #endif
 	{ "flash", cmd_flash, "[off]" },
+	{ "flash2", cmd_flash2, "[off]" },
 	{ NULL, NULL }
 };
 
@@ -3082,6 +3131,7 @@ void main(void)
 	SHELL_REGISTER(MY_SHELL_MODULE, commands);
 	shell_register_prompt_handler(current_prompt);
 	shell_register_default_module(MY_SHELL_MODULE);
+
 
 	while (1) {
 		k_sleep(MSEC_PER_SEC);

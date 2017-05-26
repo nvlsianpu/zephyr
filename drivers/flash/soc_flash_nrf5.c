@@ -161,12 +161,142 @@ static const struct flash_driver_api flash_nrf5_api = {
 	.write_protection = flash_nrf5_write_protection,
 };
 
+// semaphore for synchronization flash opperations.
+static struct k_sem flash_nrf5_sem;
+
 static int nrf5_flash_init(struct device *dev)
 {
 	dev->driver_api = &flash_nrf5_api;
+
+	k_sem_init(&flash_nrf5_sem, 0, 1);
+	printk("flash init\n");
 
 	return 0;
 }
 
 DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 	     NULL, NULL, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
+
+
+#include "../../../subsys/bluetooth/controller/ticker/ticker.h"
+#include "../../../subsys/bluetooth/controller/hal/radio.h"
+
+#define FLASH_INTERVAL 1000000UL /* 1 sec */
+#define FLASH_SLOT     100 /* 100 us */
+
+extern u8_t ll_flash_ticker_id_get(); // from ll.c
+extern void radio_state_abort(void); /* BLE controller abort intf. */
+
+typedef void (*flash_op_handler_t) (void* context);
+
+typedef struct {
+	flash_op_handler_t p_op_handler;
+	void * p_op_context; // [in,out]
+} flash_op_desc_t;
+
+
+
+
+
+static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
+		void *context)
+{
+	if (radio_is_idle()) {
+		((flash_op_desc_t*)context)->p_op_handler(((flash_op_desc_t*)context)->p_op_context);
+	} else {
+		printk("Error: radio not idle!\n");
+	}
+
+	int err = ticker_stop(0, 0, 0, NULL, NULL);
+
+	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+			printk("Failed to stop ticker %d.\n",err);
+	}
+
+	/* notify thread that data is available */
+	k_sem_give(&flash_nrf5_sem);
+}
+
+static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
+		void *context)
+{
+		u32_t ticks_now;
+		int err;
+
+		u8_t ticker_id = ll_flash_ticker_id_get();
+
+		ticks_now = ticker_ticks_now_get();
+
+		radio_state_abort();
+
+		/* start a secondary ticker after ~ 500 us, this will let any
+		 * radio role to gracefully release the Radio h/w */
+
+		err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
+		   	0, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
+		   	0, /* flash ticker id */
+		   	ticks_now/*ticks_at_expire*/, /* current tick */
+			TICKER_US_TO_TICKS(500), /* first int. */
+		   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
+		   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
+		   	0, /* lazy, voluntary skips */
+		   	TICKER_US_TO_TICKS(FLASH_SLOT),
+			time_slot_callback_work,
+			context,
+		   	NULL, /* no op callback */
+		   	NULL);
+
+		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+				printk("Failed to start 2nd ticker %d.\n",err);
+		}
+
+		err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+
+		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+				printk("Failed to stop ticker %d.\n",err);
+		}
+}
+
+
+int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
+{
+
+
+	u8_t ticker_id = ll_flash_ticker_id_get();
+	u32_t err;
+
+	/*
+	u32_t ticker_start(u8_t instance_index, u8_t user_id, u8_t ticker_id,
+		   u32_t ticks_anchor, u32_t ticks_first, u32_t ticks_periodic,
+		   u32_t remainder_periodic, u16_t lazy, u16_t ticks_slot,
+		   ticker_timeout_func ticker_timeout_func, void *context,
+		   ticker_op_func fp_op_func, void *op_context);
+	 */
+
+	err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
+			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
+			   ticker_id, /* flash ticker id */
+			   ticker_ticks_now_get(), /* current tick */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
+			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
+			   0, /* lazy, voluntary skips */
+			   TICKER_US_TO_TICKS(FLASH_SLOT),
+			   time_slot_callback_helper,
+			   p_flash_op_desc,
+			   NULL, /* no op callback */
+			   NULL);
+
+	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+		printk("Failed to start ticker 1.\n");
+		return err;
+	}
+
+	if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) {
+	        printk("flash_nrf5_sem not available!\n");
+	        err = 4;
+	}
+
+	return err;
+}
+
