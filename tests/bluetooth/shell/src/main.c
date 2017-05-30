@@ -3040,7 +3040,9 @@ extern int erase_in_timeslot(u32_t addr, u32_t size);
 
 static int cmd_erase(int argc, char *argv[])
 {
-	return erase_in_timeslot(0x40000, 0xf000);
+	int result;
+	result = erase_in_timeslot(0x40000, 0xf000);
+	printk("%u\n",result);
 }
 
 #define HELP_NONE "[none]"

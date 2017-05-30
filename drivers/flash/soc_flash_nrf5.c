@@ -109,24 +109,14 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 	return 0;
 }
 
-
-static void base_flash_nrf5_erase(u32_t addr)
-{
-	/* Erase uses a specific configuration register */
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
-
-	NRF_NVMC->ERASEPAGE = (u32_t)addr;
-	nvmc_wait_ready();
-
-	printk("Erase page %d in timeslot done.\n", addr);
-}
-
+/*static*/ int erase_in_timeslot(u32_t addr, u32_t size);
+/*static*/ int erase_in_current_context(u32_t addr, u32_t size);
 
 static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 {
 	u32_t pg_size = NRF_FICR->CODEPAGESIZE;
 	u32_t n_pages = size / pg_size;
+	int   ret;
 
 	/* Erase can only be done per page */
 	if (((addr % pg_size) != 0) || ((size % pg_size) != 0)) {
@@ -141,19 +131,18 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 		return 0;
 	}
 
-	/* Erase uses a specific configuration register */
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
+#ifdef CONFIG_BLUETOOTH_CONTROLLER
 
-	for (u32_t i = 0; i < n_pages; i++) {
-		NRF_NVMC->ERASEPAGE = (u32_t)addr + (i * pg_size);
-		nvmc_wait_ready();
-	}
+	// @todo if(ble_is_initialized) {
+	ret = erase_in_timeslot(addr, size);
+	// @todo } else {
+	//  ret = erase_in_current_context(addr, size);
+	//}
+#else
+	ret = erase_in_current_context(addr, size);
+#endif
 
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
-	nvmc_wait_ready();
-
-	return 0;
+	return ret;
 }
 
 static int flash_nrf5_write_protection(struct device *dev, bool enable)
@@ -206,6 +195,7 @@ typedef void (*flash_op_handler_t) (void* context);
 typedef struct {
 	flash_op_handler_t p_op_handler;
 	void * p_op_context; // [in,out]
+	int result;
 } flash_op_desc_t;
 
 
@@ -217,8 +207,10 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder, u16_
 {
 	if (radio_is_idle()) {
 		((flash_op_desc_t*)context)->p_op_handler(((flash_op_desc_t*)context)->p_op_context);
+		((flash_op_desc_t*)context)->result = 0;
 	} else {
 		printk("Error: radio not idle!\n");
+		((flash_op_desc_t*)context)->result = EBUSY; // @todo error code
 	}
 
 	int err = ticker_stop(0, 0, 0, NULL, NULL);
@@ -262,6 +254,7 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u1
 
 		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
 				printk("Failed to start 2nd ticker %d.\n",err);
+				((flash_op_desc_t*)context)->result = -ECANCELED; // @todo erro code?
 		}
 
 		err = ticker_stop(0, 3, ticker_id, NULL, NULL);
@@ -303,15 +296,15 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 
 	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
 		printk("Failed to start ticker 1.\n");
-		return err;
+		return -ECANCELED; // @todo erro code?
 	}
 
 	if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) {
 	        printk("flash_nrf5_sem not available!\n");
-	        err = 4;
+	        err = -ETIMEDOUT; // @todo error code
 	}
 
-	return err;
+	return p_flash_op_desc->result;
 }
 
 
@@ -329,8 +322,16 @@ void erase_op_func(void * context)
 	erase_context_t * e_ctx = context;
 	u32_t i                 = 0;
 
+
+	/* Erase uses a specific configuration register */
+	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
+	nvmc_wait_ready();
+
 	do	{
-		base_flash_nrf5_erase(e_ctx->addr);
+		NRF_NVMC->ERASEPAGE = e_ctx->addr;
+		nvmc_wait_ready();
+
+		printk("Erase page %d in timeslot done.\n", e_ctx->addr);
 
 		e_ctx->size -= pg_size;
 		e_ctx->addr += pg_size;
@@ -346,6 +347,9 @@ void erase_op_func(void * context)
 		}
 
 	} while (e_ctx->size > 0);
+
+	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
+	nvmc_wait_ready();
 }
 
 int erase_in_timeslot(u32_t addr, u32_t size)
@@ -361,6 +365,28 @@ int erase_in_timeslot(u32_t addr, u32_t size)
 			&context
 	};
 
-	return work_in_time_slot(&flash_op_desc);
+	int result;
 
+	do {
+		result = work_in_time_slot(&flash_op_desc);
+		if (result != 0) {
+			return result;
+		}
+	} while (context.size > 0); // Loop if operation need addidtiona timeslot(s) to been done.
+
+	return 0;
 }
+
+int erase_in_current_context(u32_t addr, u32_t size)
+{
+	erase_context_t context = {
+			addr,
+			size,
+			0 /* disable time limit */
+	};
+
+	erase_op_func(&context);
+
+	return 0;
+}
+
