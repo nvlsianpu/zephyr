@@ -52,14 +52,13 @@ static int flash_nrf5_read(struct device *dev, off_t addr,
 	return 0;
 }
 
+int write_in_timeslot(off_t addr, const void *data, size_t len);
+int write_in_current_context(off_t addr, const void *data, size_t len);
+
 static int flash_nrf5_write(struct device *dev, off_t addr,
 			     const void *data, size_t len)
 {
-	u32_t addr_word;
-	u32_t tmp_word;
-	void *data_word;
-	u32_t remaining = len;
-	u32_t count = 0;
+	int ret;
 
 	if (!is_addr_valid(addr, len)) {
 		return -EINVAL;
@@ -69,44 +68,18 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 		return 0;
 	}
 
-	/* Start with a word-aligned address and handle the offset */
-	addr_word = addr & ~0x3;
+#ifdef CONFIG_BLUETOOTH_CONTROLLER
 
-	/* If not aligned, read first word, update and write it back */
-	if (!is_aligned_32(addr)) {
-		tmp_word = *(u32_t *)(addr_word);
-		count = sizeof(u32_t) - (addr & 0x3);
-		if (count > len) {
-			count = len;
-		}
-		memcpy((u8_t *)&tmp_word + (addr & 0x3), data, count);
-		nvmc_wait_ready();
-		*(u32_t *)addr_word = tmp_word;
-		addr_word = addr + count;
-		remaining -= count;
-	}
+	// @todo if(ble_is_initialized) {
+	ret = write_in_timeslot(addr, data, len);
+	// @todo } else {
+	//  ret = write_in_current_context(addr, data, len);
+	//}
+#else
+	ret = write_in_current_context(addr, data, len);
+#endif
 
-	/* Write all the 4-byte aligned data */
-	data_word = (void *) data + count;
-	while (remaining >= sizeof(u32_t)) {
-		nvmc_wait_ready();
-		*(u32_t *)addr_word = *(u32_t *)data_word;
-		addr_word += sizeof(u32_t);
-		data_word += sizeof(u32_t);
-		remaining -= sizeof(u32_t);
-	}
-
-	/* Write remaining data */
-	if (remaining) {
-		tmp_word = *(u32_t *)(addr_word);
-		memcpy((u8_t *)&tmp_word, data_word, remaining);
-		nvmc_wait_ready();
-		*(u32_t *)addr_word = tmp_word;
-	}
-
-	nvmc_wait_ready();
-
-	return 0;
+	return ret;
 }
 
 /*static*/ int erase_in_timeslot(u32_t addr, u32_t size);
@@ -352,6 +325,91 @@ void erase_op_func(void * context)
 	nvmc_wait_ready();
 }
 
+typedef struct {
+	u32_t data_addr;
+	u32_t flash_addr; /* Address off the 1st page to erase */
+	u32_t len; /* Size off area to erase [B] */
+	u8_t  enable_time_limit;
+} write_context_t;
+
+static void shift_write_context(u32_t shift, write_context_t * w_ctx)
+{
+	w_ctx->flash_addr += shift;
+	w_ctx->data_addr += shift;
+	w_ctx->len -= shift;
+}
+
+void write_op_func(void * context)
+{
+	u32_t ticks_diff;
+	u32_t ticks_begin       = ticker_ticks_now_get();
+	write_context_t * w_ctx = context;
+	u32_t addr_word;
+	u32_t tmp_word;
+	u32_t count;
+	u32_t i = 1;
+
+	/* Start with a word-aligned address and handle the offset */
+	addr_word = (u32_t)w_ctx->flash_addr & ~0x3;
+
+	/* If not aligned, read first word, update and write it back */
+	if (!is_aligned_32(w_ctx->flash_addr)) {
+		tmp_word = *(u32_t *)(addr_word);
+		count = sizeof(u32_t) - (w_ctx->flash_addr & 0x3);
+
+		if (count > w_ctx->len) {
+			count = w_ctx->len;
+		}
+
+		memcpy((u8_t *)&tmp_word + (w_ctx->flash_addr & 0x3), (void *)w_ctx->data_addr, count);
+		nvmc_wait_ready();
+		*(u32_t *)addr_word = tmp_word;
+
+		shift_write_context(count, w_ctx);
+
+		if (w_ctx->enable_time_limit) {
+
+			ticks_diff = ticker_ticks_now_get() - ticks_begin;
+
+			if ((2 * ticks_diff) > FLASH_SLOT) {
+				nvmc_wait_ready();
+				return;
+			}
+		}
+	}
+
+	/* Write all the 4-byte aligned data */
+	while (w_ctx->len >= sizeof(u32_t)) {
+		nvmc_wait_ready();
+		*(u32_t *)w_ctx->flash_addr = *(u32_t *)w_ctx->data_addr;
+
+		shift_write_context(sizeof(u32_t), w_ctx);
+
+		if (w_ctx->enable_time_limit) {
+
+			ticks_diff = ticker_ticks_now_get() - ticks_begin;
+
+			if ((ticks_diff + ticks_diff/i) > FLASH_SLOT) {
+				nvmc_wait_ready();
+				return;
+			}
+		}
+	}
+
+	/* Write remaining data */
+	if (w_ctx->len) {
+		tmp_word = *(u32_t *)(w_ctx->flash_addr);
+		memcpy((u8_t *)&tmp_word, (void *)w_ctx->data_addr, w_ctx->len);
+		nvmc_wait_ready();
+		*(u32_t *)w_ctx->flash_addr = tmp_word;
+
+		shift_write_context(w_ctx->len, w_ctx);
+	}
+
+	nvmc_wait_ready();
+}
+
+
 int erase_in_timeslot(u32_t addr, u32_t size)
 {
 	erase_context_t context = {
@@ -390,3 +448,42 @@ int erase_in_current_context(u32_t addr, u32_t size)
 	return 0;
 }
 
+int write_in_timeslot(off_t addr, const void *data, size_t len)
+{
+	write_context_t context = {
+			(u32_t) data,
+			addr,
+			len,
+			1 /* enable time limit */
+	};
+
+	flash_op_desc_t flash_op_desc = {
+			write_op_func,
+			&context
+	};
+
+	int result;
+
+	do {
+		result = work_in_time_slot(&flash_op_desc);
+		if (result != 0) {
+			return result;
+		}
+	} while (context.len > 0); // Loop if operation need addidtiona timeslot(s) to been done.
+
+	return 0;
+}
+
+int write_in_current_context(off_t addr, const void *data, size_t len)
+{
+	write_context_t context = {
+			(u32_t) data,
+			addr,
+			len,
+			0 /* enable time limit */
+	};
+
+	write_op_func(&context);
+
+	return 0;
+}
