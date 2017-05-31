@@ -55,6 +55,9 @@ static int flash_nrf5_read(struct device *dev, off_t addr,
 int write_in_timeslot(off_t addr, const void *data, size_t len);
 int write_in_current_context(off_t addr, const void *data, size_t len);
 
+#define IS_BLE_INITIALIZED() 1// @todo is_ble_initialized)
+
+
 static int flash_nrf5_write(struct device *dev, off_t addr,
 			     const void *data, size_t len)
 {
@@ -68,16 +71,11 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 		return 0;
 	}
 
-#ifdef CONFIG_BLUETOOTH_CONTROLLER
-
-	// @todo if(ble_is_initialized) {
-	ret = write_in_timeslot(addr, data, len);
-	// @todo } else {
-	//  ret = write_in_current_context(addr, data, len);
-	//}
-#else
-	ret = write_in_current_context(addr, data, len);
-#endif
+	if ( IS_ENABLED(CONFIG_BLUETOOTH_CONTROLLER) && IS_BLE_INITIALIZED()) {
+		ret = write_in_timeslot(addr, data, len);
+	} else {
+		ret = write_in_current_context(addr, data, len);
+	}
 
 	return ret;
 }
@@ -104,16 +102,11 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 		return 0;
 	}
 
-#ifdef CONFIG_BLUETOOTH_CONTROLLER
-
-	// @todo if(ble_is_initialized) {
-	ret = erase_in_timeslot(addr, size);
-	// @todo } else {
-	//  ret = erase_in_current_context(addr, size);
-	//}
-#else
-	ret = erase_in_current_context(addr, size);
-#endif
+	if ( IS_ENABLED(CONFIG_BLUETOOTH_CONTROLLER) && IS_BLE_INITIALIZED()) {
+		ret = erase_in_timeslot(addr, size);
+	} else {
+		ret = erase_in_current_context(addr, size);
+	}
 
 	return ret;
 }
@@ -140,11 +133,15 @@ static const struct flash_driver_api flash_nrf5_api = {
 // semaphore for synchronization flash opperations.
 static struct k_sem flash_nrf5_sem;
 
+// semaphore for lock flash resorces (tickers).
+static struct k_sem flash_busy_nrf5_sem;
+
 static int nrf5_flash_init(struct device *dev)
 {
 	dev->driver_api = &flash_nrf5_api;
 
 	k_sem_init(&flash_nrf5_sem, 0, 1);
+	k_sem_init(&flash_busy_nrf5_sem, 1, 1);
 	printk("flash init\n");
 
 	return 0;
@@ -157,7 +154,7 @@ DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 #include "../../../subsys/bluetooth/controller/ticker/ticker.h"
 #include "../../../subsys/bluetooth/controller/hal/radio.h"
 
-#define FLASH_INTERVAL 1000000UL /* 1 sec */
+#define FLASH_INTERVAL 1000000UL // 1 sec  @ todo FLASH_PAGE_ERASE_MAX_TIME_US
 #define FLASH_SLOT     100 /* 100 us */
 
 extern u8_t ll_flash_ticker_id_get(); // from ll.c
@@ -214,12 +211,12 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u1
 		err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
 		   	0, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
 		   	0, /* flash ticker id */
-		   	ticks_now/*ticks_at_expire*/, /* current tick */
+			ticks_at_expire, /* current tick */
 			TICKER_US_TO_TICKS(500), /* first int. */
-		   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
-		   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
+		   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */ //@todo 0
+		   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/ //@todo 0
 		   	0, /* lazy, voluntary skips */
-		   	TICKER_US_TO_TICKS(FLASH_SLOT),
+		   	TICKER_US_TO_TICKS(FLASH_SLOT), //@todo 0
 			time_slot_callback_work,
 			context,
 		   	NULL, /* no op callback */
@@ -245,6 +242,12 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 	u8_t ticker_id = ll_flash_ticker_id_get();
 	u32_t err;
 
+	/* lock resources */
+	if (k_sem_take(&flash_busy_nrf5_sem, 0) != 0) {
+	        printk("flash driver is locked!\n");
+	        return -ENOLCK; // @todo error code
+	}
+
 	/*
 	u32_t ticker_start(u8_t instance_index, u8_t user_id, u8_t ticker_id,
 		   u32_t ticks_anchor, u32_t ticks_first, u32_t ticks_periodic,
@@ -257,7 +260,7 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
 			   ticker_id, /* flash ticker id */
 			   ticker_ticks_now_get(), /* current tick */
-			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */
+			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */ // @todo 0
 			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
 			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
 			   0, /* lazy, voluntary skips */
@@ -267,17 +270,22 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 			   NULL, /* no op callback */
 			   NULL);
 
+	int result;
+
 	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
 		printk("Failed to start ticker 1.\n");
-		return -ECANCELED; // @todo erro code?
-	}
-
-	if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) {
+		result = -ECANCELED; // @todo erro code?
+	} else if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) { /* wait for operation's complete */
 	        printk("flash_nrf5_sem not available!\n");
-	        err = -ETIMEDOUT; // @todo error code
+	        result = -ETIMEDOUT; // @todo error code
+	} else {
+		result = p_flash_op_desc->result;
 	}
 
-	return p_flash_op_desc->result;
+	/* unlock resources */
+	k_sem_give(&flash_busy_nrf5_sem);
+
+	return result;
 }
 
 

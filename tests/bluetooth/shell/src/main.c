@@ -3043,6 +3043,36 @@ static int cmd_erase(int argc, char *argv[])
 	int result;
 	result = erase_in_timeslot(0x40000, 0xf000);
 	printk("%u\n",result);
+	return result;
+}
+
+#include "flash.h"
+
+static int cmd_flash3(int argc, char *argv[])
+{
+	struct device *flash_dev;
+	flash_dev = device_get_binding(CONFIG_SOC_FLASH_NRF5_DEV_NAME);
+
+	if (!flash_dev) {
+		printk("Nordic nRF5 flash driver was not found!\n");
+		return;
+	}
+
+	flash_write_protection_set(flash_dev, 0);
+
+	u8_t buf_array[] = "nordic\n";
+	u8_t check_array[sizeof(buf_array)] = {1};
+
+	if (flash_write(flash_dev, 0x40000, buf_array, sizeof(buf_array)) != 0) {
+		printk("   Flash write failed!\n");
+		return -1;
+	}
+	printk("   Flash write Succed\n");
+
+	flash_read(flash_dev, 0x40000, check_array, sizeof(check_array));
+
+	printk("%s\n", check_array);
+	return 0;
 }
 
 #define HELP_NONE "[none]"
@@ -3127,6 +3157,7 @@ static const struct shell_cmd commands[] = {
 #endif
 	{ "flash", cmd_flash, "[off]" },
 	{ "flash2", cmd_flash2, "[off]" },
+	{ "flash3", cmd_flash3, "[off]" },
 	{ "erase", cmd_erase},
 	{ NULL, NULL }
 };

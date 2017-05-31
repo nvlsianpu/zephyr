@@ -21,4 +21,7 @@
 
 #endif /* !_ASMLANGUAGE */
 
+#define FLASH_PAGE_ERASE_MAX_TIME_US 89700
+#define FLASH_WRIT_MAX_TIME_US 338
+
 #endif /* _NORDICSEMI_NRF52_SOC_H_ */
