@@ -239,7 +239,7 @@ int ll_init(struct k_sem *sem_rx)
 	return 0;
 }
 
-u8_t ll_flash_ticker_id_get(void)
+u8_t ll_timeslot_ticker_id_get(void)
 {
 	return (TICKER_NODES - FLASH_TICKER_NODES); /* The last index in the total tickers */
 }

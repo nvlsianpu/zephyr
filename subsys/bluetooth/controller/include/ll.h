@@ -46,6 +46,7 @@ u32_t ll_start_enc_req_send(u16_t handle, u8_t err_code,
 u32_t ll_feature_req_send(u16_t handle);
 u32_t ll_version_ind_send(u16_t handle);
 u32_t ll_terminate_ind_send(u16_t handle, u8_t reason);
+u8_t ll_timeslot_ticker_id_get(void);
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER_DATA_LENGTH)
 u32_t ll_length_req_send(u16_t handle, u16_t tx_octets);

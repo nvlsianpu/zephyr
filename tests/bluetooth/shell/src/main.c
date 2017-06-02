@@ -2734,319 +2734,31 @@ static int cmd_bredr_sdp_find_record(int argc, char *argv[])
 }
 #endif
 
-#define FLASH_INTERVAL 1000000UL /* 1 sec */
-#define FLASH_SLOT     100 /* 100 us */
-
-extern u8_t ll_flash_ticker_id_get();
-volatile u32_t timeStamp32;
-
-u8_t radio_is_stoped(void);
 
 
-
-void flash_2nd_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
-			void *context)
-{
-	u32_t ticks_now;
-	u32_t err;
-
-	ticks_now = ticker_ticks_now_get();
-
-	printk("flash_2nd_timeout_func: expire= %u, now= %u, parent timeout= %u\n", ticks_at_expire,
-		   ticks_now, timeStamp32);
-
-
-	err = ticker_stop(0, 0, 0, NULL, NULL);
-
-	switch (err) {
-		case TICKER_STATUS_SUCCESS:
-			break;
-
-		case TICKER_STATUS_BUSY:
-			//printk("Stop ticker req. queued.\n");
-			break;
-
-		default:
-			printk("Failed to stop ticker %d.\n",err);
-			break;
-	}
-
-
-	//printk("Radio state %d\n", radio_is_stoped());
-
-	/* notify thread that data is available */
-	k_sem_give(&flash_nrf5_sem);
-}
-
-static volatile u32_t flash_sync;
-
-
-
-void flash_timeout_func(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
-			void *context)
-{
-	extern u8_t ll_flash_ticker_id_get();
-	
-	u32_t ticks_now;
-	u32_t err;
-
-	u8_t ticker_id = ll_flash_ticker_id_get();
-	
-	switch(flash_sync) {
-		case 0:
-			ticks_now = ticker_ticks_now_get();
-			extern void radio_state_abort(void); /* BLE controller abort intf. */
-
-			//printk("flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
-			//	   ticks_now);
-
-		    //printk("Radio state %d\n", radio_is_stoped());
-
-			radio_state_abort();
-
-			/* start a secondary ticker after ~ 500 us, this will let any
-			 * radio role to gracefully release the Radio h/w */
-
-			flash_sync++;
-			timeStamp32 = ticks_now;
-
-			err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
-			   	0, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
-			   	0, /* flash ticker id */
-			   	ticks_now/*ticks_at_expire*/, /* current tick */
-				TICKER_US_TO_TICKS(500), /* first int. */
-			   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
-			   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
-			   	0, /* lazy, voluntary skips */
-			   	TICKER_US_TO_TICKS(FLASH_SLOT),
-			   	flash_2nd_timeout_func,
-			   	NULL,
-			   	NULL, /* no op callback */
-			   	NULL);
-			
-			switch (err) {
-				case TICKER_STATUS_SUCCESS:
-					break;
-
-				case TICKER_STATUS_BUSY:
-					//printk("Start 2nd ticker req. queued.\n");
-					break;
-
-				default:
-					printk("Failed to start 2nd ticker %d.\n",err);
-					break;
-			}
-
-			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
-
-			switch (err) {
-				case TICKER_STATUS_SUCCESS:
-					break;
-
-				case TICKER_STATUS_BUSY:
-					//printk("Stop ticker req. queued.\n");
-					break;
-
-				default:
-					printk("Failed to stop ticker %d.\n",err);
-					break;
-			}
-
-
-
-			//printk("Radio state %d\n", radio_is_stoped());
-
-			break;
-			
-
-			/*u32_t ticker_update(u8_t instance_index, u8_t user_id, u8_t ticker_id,
-					u16_t ticks_drift_plus, u16_t ticks_drift_minus,
-					u16_t ticks_slot_plus, u16_t ticks_slot_minus, u16_t lazy,
-					u8_t force, ticker_op_func fp_op_func, void *op_context);*/
-
-//			err = ticker_update(0, /* Radio instance (can use define from ctrl.h) */
-//						3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
-//						ticker_id, /* flash ticker id */
-//						0,//TICKER_US_TO_TICKS(500), /*u16_t ticks_drift_plus*/
-//						TICKER_US_TO_TICKS(999500), /* u16_t ticks_drift_minus,*/
-//						0, /* u16_t ticks_slot_plus*/
-//						0, /* u16_t ticks_slot_minus*/
-//						0, /* u16_t lazy*/
-//						0/*1*/,/* u8_t force*/
-//						NULL, /*ticker_op_func fp_op_func */
-//						NULL /*void *op_context*/
-//				);
-//
-//			if (err) {
-//				if (TICKER_STATUS_BUSY == err) {
-//					printk("Update ticker req. queued.\n");
-//				} else {
-//					printk("Failed to update ticker %d.\n", err);
-//				}
-//			}
-//
-//			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
-//
-//			switch (err) {
-//				case TICKER_STATUS_SUCCESS:
-//					break;
-//
-//				case TICKER_STATUS_BUSY:
-//					printk("Stop 2nd ticker req. queued.\n");
-//					break;
-//
-//				default:
-//					printk("Failed to stop 2nd ticker %d.\n",err);
-//					break;
-//			}
-//
-//			break;
-
-//		case 1:
-//			ticks_now = ticker_ticks_now_get();
-//
-//			printk("2nd flash_timeout_func: expire= %u, now= %u\n", ticks_at_expire,
-//				   ticks_now);
-//			flash_sync++;
-//
-//			err = ticker_stop(0, 3, ticker_id, NULL, NULL);
-//
-//			switch (err) {
-//				case TICKER_STATUS_SUCCESS:
-//					break;
-//
-//				case TICKER_STATUS_BUSY:
-//					printk("Stop ticker req. queued.\n");
-//					break;
-//
-//				default:
-//					printk("Failed to stop ticker %d.\n",err);
-//					break;
-//			}
-//
-//			err = ticker_stop(0, 3, ticker_id + 1, NULL, NULL);
-//
-//			switch (err) {
-//				case TICKER_STATUS_SUCCESS:
-//					break;
-//
-//				case TICKER_STATUS_BUSY:
-//					printk("Stop 2nd ticker req. queued.\n");
-//					break;
-//
-//				default:
-//					printk("Failed to stop 2nd ticker %d.\n",err);
-//					break;
-//			}
-//
-//			break;
-		default:
-			printk("unwanted tick\n");
-			break;
-	}
-	
-	
-	
-	/* secondary ticker timeout can check and assert if required in case
-	 * radio has not been restored to idle state using radio_is_idle() */
-}
-
-
-static int cmd_flash(int argc, char *argv[])
-{
-	extern u8_t ll_flash_ticker_id_get();
-	u8_t ticker_id = ll_flash_ticker_id_get();
-	u32_t err;
-
-	if ((argc == 2) && !strcmp(argv[1], "off")) {
-		err = ticker_stop(0, 3, ticker_id, NULL, NULL);
-
-		if (err) {
-			printk("Failed to stop ticker.\n");
-		}
-
-		return err;
-	}
-
-	flash_sync = 0;
-	
-	/*
-	u32_t ticker_start(u8_t instance_index, u8_t user_id, u8_t ticker_id,
-		   u32_t ticks_anchor, u32_t ticks_first, u32_t ticks_periodic,
-		   u32_t remainder_periodic, u16_t lazy, u16_t ticks_slot,
-		   ticker_timeout_func ticker_timeout_func, void *context,
-		   ticker_op_func fp_op_func, void *op_context);
-	 */
-
-	err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
-			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
-			   ticker_id, /* flash ticker id */
-			   ticker_ticks_now_get(), /* current tick */
-			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */
-			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
-			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
-			   0, /* lazy, voluntary skips */
-			   TICKER_US_TO_TICKS(FLASH_SLOT),
-			   flash_timeout_func,
-			   NULL,
-			   NULL, /* no op callback */
-			   NULL);
-	if (err) {
-		printk("Failed to start ticker.\n");
-	}
-
-	   printk("Request flash_nrf5.\n");
-	 if (k_sem_take(&flash_nrf5_sem, K_MSEC(200)) != 0) {
-	        printk("flash_nrf5_sem not available!\n");
-	 } else {
-		   printk("flash_nrf5_sem available.\n");
-	 }
-
-	return err;
-}
-
-
-
-typedef void (*flash_op_handler_t) (void* context);
-
-typedef struct {
-	flash_op_handler_t p_op_handler;
-	void * p_op_context; // [in,out]
-} flash_op_desc_t;
-
-
-int work_in_time_slot(flash_op_desc_t * p_flash_op_desc);
-
-
-void test_op_func(void * context)
-{
-	printk("test value is %d\n", *(u8_t*)context);
-}
-
-static int cmd_flash2(int argc, char *argv[])
-{
-	u8_t context = 23;
-	flash_op_desc_t flash_op_desc = {
-			test_op_func,
-			&context
-	};
-
-	int err = work_in_time_slot(&flash_op_desc);
-
-	return err;
-}
-
-extern int erase_in_timeslot(u32_t addr, u32_t size);
+#include "flash.h"
 
 static int cmd_erase(int argc, char *argv[])
 {
+	struct device *flash_dev;
+	flash_dev = device_get_binding(CONFIG_SOC_FLASH_NRF5_DEV_NAME);
+
+	if (!flash_dev) {
+		printk("Nordic nRF5 flash driver was not found!\n");
+		return -1;
+	}
+
+	flash_write_protection_set(flash_dev, 0);
+
+
 	int result;
-	result = erase_in_timeslot(0x40000, 0xf000);
+
+	result = flash_erase(flash_dev, 0x40000, 0xf000);
 	printk("%u\n",result);
 	return result;
 }
 
-#include "flash.h"
+
 
 static int cmd_flash3(int argc, char *argv[])
 {
@@ -3055,7 +2767,7 @@ static int cmd_flash3(int argc, char *argv[])
 
 	if (!flash_dev) {
 		printk("Nordic nRF5 flash driver was not found!\n");
-		return;
+		return -1;
 	}
 
 	flash_write_protection_set(flash_dev, 0);
@@ -3155,9 +2867,7 @@ static const struct shell_cmd commands[] = {
 	{ "br-rfcomm-disconnect", cmd_rfcomm_disconnect, HELP_NONE },
 #endif /* CONFIG_BLUETOOTH_RFCOMM */
 #endif
-	{ "flash", cmd_flash, "[off]" },
-	{ "flash2", cmd_flash2, "[off]" },
-	{ "flash3", cmd_flash3, "[off]" },
+	{ "flash", cmd_flash3, "[off]" },
 	{ "erase", cmd_erase},
 	{ NULL, NULL }
 };
