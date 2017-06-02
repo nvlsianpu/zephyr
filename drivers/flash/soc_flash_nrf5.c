@@ -154,13 +154,14 @@ DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 #include "../../../subsys/bluetooth/controller/ticker/ticker.h"
 #include "../../../subsys/bluetooth/controller/hal/radio.h"
 
-#define FLASH_INTERVAL 1000000UL // 1 sec  @ todo FLASH_PAGE_ERASE_MAX_TIME_US
-#define FLASH_SLOT     100 /* 100 us */
+
+#define FLASH_SLOT     FLASH_PAGE_ERASE_MAX_TIME_US
+#define FLASH_INTERVAL FLASH_SLOT
 
 extern u8_t ll_flash_ticker_id_get(); // from ll.c
 extern void radio_state_abort(void); /* BLE controller abort intf. */
 
-typedef void (*flash_op_handler_t) (void* context);
+typedef int (*flash_op_handler_t) (void* context);
 
 typedef struct {
 	flash_op_handler_t p_op_handler;
@@ -169,28 +170,33 @@ typedef struct {
 } flash_op_desc_t;
 
 
-
+#define FLASH_OP_DONE    (0)  // must be the Zero for compilance with the driver API.
+#define FLASH_OP_ONGOING (-1)
 
 
 static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
 		void *context)
 {
+	int result;
+	u8_t ticker_id;
+
 	if (radio_is_idle()) {
-		((flash_op_desc_t*)context)->p_op_handler(((flash_op_desc_t*)context)->p_op_context);
-		((flash_op_desc_t*)context)->result = 0;
-	} else {
-		printk("Error: radio not idle!\n");
-		((flash_op_desc_t*)context)->result = EBUSY; // @todo error code
+		if (FLASH_OP_DONE == ((flash_op_desc_t*)context)->p_op_handler(((flash_op_desc_t*)context)->p_op_context))
+		{
+			ticker_id = ll_flash_ticker_id_get();
+
+			result = ticker_stop(0, 3, ticker_id, NULL, NULL);
+
+			if ((result != TICKER_STATUS_SUCCESS) && (result != TICKER_STATUS_BUSY)) {
+					printk("Failed to stop ticker %d.\n",result);
+			}
+
+			((flash_op_desc_t*)context)->result = 0;
+
+			/* notify thread that data is available */
+			k_sem_give(&flash_nrf5_sem);
+		}
 	}
-
-	int err = ticker_stop(0, 0, 0, NULL, NULL);
-
-	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
-			printk("Failed to stop ticker %d.\n",err);
-	}
-
-	/* notify thread that data is available */
-	k_sem_give(&flash_nrf5_sem);
 }
 
 static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
@@ -205,7 +211,7 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u1
 
 		radio_state_abort();
 
-		/* start a secondary ticker after ~ 500 us, this will let any
+		/* start a secondary one-shot ticker after ~ 500 us, this will let any
 		 * radio role to gracefully release the Radio h/w */
 
 		err = ticker_start(0, /* Radio instance (can use define from ctrl.h) */
@@ -213,10 +219,10 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u1
 		   	0, /* flash ticker id */
 			ticks_at_expire, /* current tick */
 			TICKER_US_TO_TICKS(500), /* first int. */
-		   	TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */ //@todo 0
-		   	TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/ //@todo 0
+		   	0, /* periodic (on-shot) */
+		   	0, /* per. remaind. (on-shot) */
 		   	0, /* lazy, voluntary skips */
-		   	TICKER_US_TO_TICKS(FLASH_SLOT), //@todo 0
+			0,
 			time_slot_callback_work,
 			context,
 		   	NULL, /* no op callback */
@@ -225,12 +231,16 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u1
 		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
 				printk("Failed to start 2nd ticker %d.\n",err);
 				((flash_op_desc_t*)context)->result = -ECANCELED; // @todo erro code?
-		}
 
-		err = ticker_stop(0, 3, ticker_id, NULL, NULL);
+				/* abort flash timeslots */
+				err = ticker_stop(0, 3, ticker_id, NULL, NULL);
 
-		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
-				printk("Failed to stop ticker %d.\n",err);
+				if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+						printk("Failed to stop ticker %d.\n",err);
+				}
+
+				/* notify thread that data is available */
+				k_sem_give(&flash_nrf5_sem);
 		}
 }
 
@@ -260,7 +270,7 @@ int work_in_time_slot(flash_op_desc_t * p_flash_op_desc)
 			   3, /* user id for thread mode (MAYFLY_CALLER_ID_*) */
 			   ticker_id, /* flash ticker id */
 			   ticker_ticks_now_get(), /* current tick */
-			   TICKER_US_TO_TICKS(FLASH_INTERVAL/100), /* first int. */ // @todo 0
+			   0, /* first int. immedetely */
 			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
 			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
 			   0, /* lazy, voluntary skips */
@@ -295,7 +305,7 @@ typedef struct {
 	u8_t  enable_time_limit;
 } erase_context_t;
 
-void erase_op_func(void * context)
+int erase_op_func(void * context)
 {
 	u32_t ticks_diff;
 	u32_t ticks_begin       = ticker_ticks_now_get();
@@ -331,6 +341,8 @@ void erase_op_func(void * context)
 
 	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
 	nvmc_wait_ready();
+
+	return (e_ctx->size > 0) ? FLASH_OP_ONGOING : FLASH_OP_DONE; // give 0 if done
 }
 
 typedef struct {
@@ -347,7 +359,7 @@ static void shift_write_context(u32_t shift, write_context_t * w_ctx)
 	w_ctx->len -= shift;
 }
 
-void write_op_func(void * context)
+int write_op_func(void * context)
 {
 	u32_t ticks_diff;
 	u32_t ticks_begin       = ticker_ticks_now_get();
@@ -381,7 +393,7 @@ void write_op_func(void * context)
 
 			if ((2 * ticks_diff) > FLASH_SLOT) {
 				nvmc_wait_ready();
-				return;
+				return FLASH_OP_ONGOING;
 			}
 		}
 	}
@@ -399,7 +411,7 @@ void write_op_func(void * context)
 
 			if ((ticks_diff + ticks_diff/i) > FLASH_SLOT) {
 				nvmc_wait_ready();
-				return;
+				return FLASH_OP_ONGOING;
 			}
 		}
 	}
@@ -415,6 +427,8 @@ void write_op_func(void * context)
 	}
 
 	nvmc_wait_ready();
+
+	return FLASH_OP_DONE;
 }
 
 
@@ -431,16 +445,7 @@ int erase_in_timeslot(u32_t addr, u32_t size)
 			&context
 	};
 
-	int result;
-
-	do {
-		result = work_in_time_slot(&flash_op_desc);
-		if (result != 0) {
-			return result;
-		}
-	} while (context.size > 0); // Loop if operation need addidtiona timeslot(s) to been done.
-
-	return 0;
+	return work_in_time_slot(&flash_op_desc);
 }
 
 int erase_in_current_context(u32_t addr, u32_t size)
@@ -451,9 +456,7 @@ int erase_in_current_context(u32_t addr, u32_t size)
 			0 /* disable time limit */
 	};
 
-	erase_op_func(&context);
-
-	return 0;
+	return	erase_op_func(&context);
 }
 
 int write_in_timeslot(off_t addr, const void *data, size_t len)
@@ -470,16 +473,7 @@ int write_in_timeslot(off_t addr, const void *data, size_t len)
 			&context
 	};
 
-	int result;
-
-	do {
-		result = work_in_time_slot(&flash_op_desc);
-		if (result != 0) {
-			return result;
-		}
-	} while (context.len > 0); // Loop if operation need addidtiona timeslot(s) to been done.
-
-	return 0;
+	return  work_in_time_slot(&flash_op_desc);
 }
 
 int write_in_current_context(off_t addr, const void *data, size_t len)
@@ -491,7 +485,5 @@ int write_in_current_context(off_t addr, const void *data, size_t len)
 			0 /* enable time limit */
 	};
 
-	write_op_func(&context);
-
-	return 0;
+	return write_op_func(&context);
 }

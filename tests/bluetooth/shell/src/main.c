@@ -3063,13 +3063,13 @@ static int cmd_flash3(int argc, char *argv[])
 	u8_t buf_array[] = "nordic\n";
 	u8_t check_array[sizeof(buf_array)] = {1};
 
-	if (flash_write(flash_dev, 0x40000, buf_array, sizeof(buf_array)) != 0) {
+	if (flash_write(flash_dev, 0x40001, buf_array, sizeof(buf_array)) != 0) {
 		printk("   Flash write failed!\n");
 		return -1;
 	}
 	printk("   Flash write Succed\n");
 
-	flash_read(flash_dev, 0x40000, check_array, sizeof(check_array));
+	flash_read(flash_dev, 0x40001, check_array, sizeof(check_array));
 
 	printk("%s\n", check_array);
 	return 0;
