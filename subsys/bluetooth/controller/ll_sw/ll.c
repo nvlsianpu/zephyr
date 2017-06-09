@@ -240,9 +240,10 @@ int ll_init(struct k_sem *sem_rx)
 	return 0;
 }
 
-u8_t ll_timeslot_ticker_id_get(void)
+void ll_timeslice_ticker_id_get(u8_t * const instance_index, u8_t * const user_id)
 {
-	return (TICKER_NODES - FLASH_TICKER_NODES); /* The last index in the total tickers */
+	*user_id = (TICKER_NODES - FLASH_TICKER_NODES); /* The last index in the total tickers */
+	*instance_index = RADIO_TICKER_INSTANCE_ID_RADIO;
 }
 
 u8_t *ll_addr_get(u8_t addr_type, u8_t *bdaddr)

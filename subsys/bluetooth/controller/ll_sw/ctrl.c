@@ -9372,7 +9372,7 @@ void radio_state_abort(void)
 	s_mfy_radio_abort.param = (void *)STATE_ABORT;
 
 	/* Stop Radio Tx/Rx */
-	retval = mayfly_enqueue(RADIO_TICKER_USER_ID_APP,
+	retval = mayfly_enqueue(RADIO_TICKER_USER_ID_WORKER,
 				RADIO_TICKER_USER_ID_WORKER, 0,
 				&s_mfy_radio_abort);
 	LL_ASSERT(!retval);
