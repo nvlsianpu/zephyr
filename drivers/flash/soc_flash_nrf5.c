@@ -16,25 +16,25 @@
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 #include <misc/__assert.h>
-#include "../../../subsys/bluetooth/controller/ticker/ticker.h"
-#include "../../../subsys/bluetooth/controller/hal/radio.h"
-#include "../../../subsys/bluetooth/controller/include/ll.h"
+#include "controller/ticker/ticker.h"
+#include "controller/hal/radio.h"
+#include "controller/include/ll.h"
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
-#define FLASH_OP_DONE    (0)  // flash operation is commpleted. Zero for compilance with the driver API.
-#define FLASH_OP_ONGOING (-1) // flash operation in progress.
+#define FLASH_OP_DONE    (0) /* 0 for compilance with the driver API. */
+#define FLASH_OP_ONGOING (-1)
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-#define BLE_IS_INITIALIZED() ticker_is_initialized(0)
+#define RADIO_TICKER_IS_INITIALIZED() ticker_is_initialized(0)
 #define FLASH_SLOT     FLASH_PAGE_ERASE_MAX_TIME_US
 #define FLASH_INTERVAL FLASH_SLOT
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
 struct erase_context {
 	u32_t addr; /* Address off the 1st page to erase */
-	u32_t size; /* Size off area to erase [B] */	
+	u32_t size; /* Size off area to erase [B] */
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-	u8_t  enable_time_limit; /* limit executionn time to timeslot per iteration*/
+	u8_t enable_time_limit; /* execution limited to timeslot */
 #endif
 }; /*< Context type for f. @ref erase_op */
 
@@ -43,17 +43,17 @@ struct write_context {
 	u32_t flash_addr; /* Address off the 1st page to erase */
 	u32_t len;        /* Size off data to write [B] */
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-	u8_t  enable_time_limit; /* limit executionn time to timeslot per iteration*/
+	u8_t  enable_time_limit; /* execution limited to timeslot*/
 #endif
 }; /*< Context type for f. @ref write_op */
 
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-typedef int (*flash_op_handler) (void* context);
+typedef int (*flash_op_handler) (void *context);
 
 struct flash_op_desc {
-	flash_op_handler p_op_handler;
-	void * p_op_context; // [in,out]
+	flash_op_handler handler;
+	void *context; /* [in,out] */
 	int result;
 };
 
@@ -68,10 +68,10 @@ static int write(off_t addr, const void *data, size_t len);
 static int erase(u32_t addr, u32_t size);
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-static int write_op(void * context); /* instantation of flash_op_handler */
+static int write_op(void *context); /* instantation of flash_op_handler */
 static int write_in_timeslice(off_t addr, const void *data, size_t len);
 
-static int erase_op(void * context); /* instantation of flash_op_handler */
+static int erase_op(void *context); /* instantation of flash_op_handler */
 static int erase_in_timeslice(u32_t addr, u32_t size);
 
 extern void radio_state_abort(void); /* BLE controller abort */
@@ -133,7 +133,7 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 	k_sem_take(&sem_lock, K_FOREVER);
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-	if (BLE_IS_INITIALIZED()) {
+	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = write_in_timeslice(addr, data, len);
 	} else
 #endif
@@ -170,7 +170,7 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 	k_sem_take(&sem_lock, K_FOREVER);
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
-	if (BLE_IS_INITIALIZED()) {
+	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = erase_in_timeslice(addr, size);
 	} else
 #endif
@@ -186,7 +186,7 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 static int flash_nrf5_write_protection(struct device *dev, bool enable)
 {
 	k_sem_take(&sem_lock, K_FOREVER);
-	
+
 	if (enable) {
 		NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
 	} else {
@@ -213,7 +213,7 @@ static int nrf5_flash_init(struct device *dev)
 	dev->driver_api = &flash_nrf5_api;
 
 	k_sem_init(&sem_lock, 1, 1);
-	
+
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 	k_sem_init(&sem_sync, 0, 1);
 #endif
@@ -227,26 +227,35 @@ DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 
-static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
+static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
+		u16_t lazy,
 		void *context)
 {
 	int result;
 	u8_t ticker_id;
 	u8_t instance_index;
+	struct flash_op_desc *op_desc;
 
 	if (radio_is_idle()) {
-		if (FLASH_OP_DONE == ((struct flash_op_desc*)context)->p_op_handler(((struct flash_op_desc*)context)->p_op_context))
-		{
+		op_desc = context;
+
+		if (op_desc->handler(op_desc->context)
+			== FLASH_OP_DONE) {
 			ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
 
 			/* Stop the time slot ticker */
-			result = ticker_stop(instance_index, 0, ticker_id, NULL, NULL);
+			result = ticker_stop(instance_index,
+					     0,
+					     ticker_id,
+					     NULL,
+					     NULL);
 
-			if ((result != TICKER_STATUS_SUCCESS) && (result != TICKER_STATUS_BUSY)) {
-					__ASSERT(0, "Failed to stop ticker.\n");
+			if ((result != TICKER_STATUS_SUCCESS)
+			    && (result != TICKER_STATUS_BUSY)) {
+				__ASSERT(0, "Failed to stop ticker.\n");
 			}
 
-			((struct flash_op_desc*)context)->result = 0;
+			((struct flash_op_desc *)context)->result = 0;
 
 			/* notify thread that data is available */
 			k_sem_give(&sem_sync);
@@ -256,52 +265,54 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder, u16_
 	}
 }
 
-static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder, u16_t lazy,
-		void *context)
+static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
+		u16_t lazy, void *context)
 {
-		u8_t instance_index;
-		u8_t ticker_id;
-		int err;
+	u8_t instance_index;
+	u8_t ticker_id;
+	int err;
 
-		ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
+	ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
 
 
-		radio_state_abort();
+	radio_state_abort();
 
-		/* start a secondary one-shot ticker after ~ 500 us, this will let any
-		 * radio role to gracefully release the Radio h/w */
+	/* start a secondary one-shot ticker after ~ 500 us, */
+	/* this will let any radio role to gracefully release the Radio h/w */
 
-		err = ticker_start(instance_index, /* Radio instance ticker */
-		   	0, /* user_id */
-		   	0, /* ticker_id */
-			ticks_at_expire, /* current tick */
-			TICKER_US_TO_TICKS(500), /* first int. */
-		   	0, /* periodic (on-shot) */
-		   	0, /* per. remaind. (on-shot) */
-		   	0, /* lazy, voluntary skips */
-			0,
-			time_slot_callback_work, /* handler for exexute the flash operiation */
-			context, /* the context for the flash operiation */
-		   	NULL, /* no op callback */
-		   	NULL);
+	err = ticker_start(instance_index, /* Radio instance ticker */
+		0, /* user_id */
+		0, /* ticker_id */
+		ticks_at_expire, /* current tick */
+		TICKER_US_TO_TICKS(500), /* first int. */
+		0, /* periodic (on-shot) */
+		0, /* per. remaind. (on-shot) */
+		0, /* lazy, voluntary skips */
+		0,
+		time_slot_callback_work, /* handler for exexute */
+					 /* the flash operiation */
+		context, /* the context for the flash operiation */
+		NULL, /* no op callback */
+		NULL);
 
-		if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
-				((struct flash_op_desc*)context)->result = -ECANCELED; // @todo erro code?
+	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
+		((struct flash_op_desc *)context)->result = -ECANCELED;
 
-				/* abort flash timeslots */
-				err = ticker_stop(instance_index, 0, ticker_id, NULL, NULL);
+		/* abort flash timeslots */
+		err = ticker_stop(instance_index, 0, ticker_id, NULL, NULL);
 
-				if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
-						__ASSERT(0,"Failed to stop ticker %d.\n");
-				}
-
-				/* notify thread that data is available */
-				k_sem_give(&sem_sync);
+		if ((err != TICKER_STATUS_SUCCESS)
+			&& (err != TICKER_STATUS_BUSY)) {
+			__ASSERT(0, "Failed to stop ticker %d.\n");
 		}
+
+		/* notify thread that data is available */
+		k_sem_give(&sem_sync);
+	}
 }
 
 
-static int work_in_time_slice(struct flash_op_desc * p_flash_op_desc)
+static int work_in_time_slice(struct flash_op_desc *p_flash_op_desc)
 {
 	u8_t instance_index;
 	u8_t ticker_id;
@@ -310,7 +321,8 @@ static int work_in_time_slice(struct flash_op_desc * p_flash_op_desc)
 	ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
 
 	err = ticker_start(instance_index,
-			   3, /* user id for thread mode (MAYFLY_CALL_ID_PROGRAM) */
+			   3, /* user id for thread mode */
+			      /* (MAYFLY_CALL_ID_PROGRAM) */
 			   ticker_id, /* flash ticker id */
 			   ticker_ticks_now_get(), /* current tick */
 			   0, /* first int. immedetely */
@@ -326,9 +338,10 @@ static int work_in_time_slice(struct flash_op_desc * p_flash_op_desc)
 	int result;
 
 	if ((err != TICKER_STATUS_SUCCESS) && (err != TICKER_STATUS_BUSY)) {
-		result = -ECANCELED; // @todo erro code?
-	} else if (k_sem_take(&sem_sync, K_MSEC(200)) != 0) { /* wait for operation's complete */
-	        result = -ETIMEDOUT; // @todo error code
+		result = -ECANCELED;
+	} else if (k_sem_take(&sem_sync, K_MSEC(200)) != 0) {
+		/* wait for operation's complete overrun*/
+		result = -ETIMEDOUT;
 	} else {
 		result = p_flash_op_desc->result;
 	}
@@ -376,10 +389,10 @@ static int write_in_timeslice(off_t addr, const void *data, size_t len)
 
 
 
-static int erase_op(void * context)
+static int erase_op(void *context)
 {
 	u32_t pg_size           = NRF_FICR->CODEPAGESIZE;
-	struct erase_context * e_ctx = context;
+	struct erase_context *e_ctx = context;
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 	u32_t ticks_diff;
@@ -420,21 +433,21 @@ static int erase_op(void * context)
 	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
 	nvmc_wait_ready();
 
-	return (e_ctx->size > 0) ? FLASH_OP_ONGOING : FLASH_OP_DONE; // give 0 if done
+	return (e_ctx->size > 0) ? FLASH_OP_ONGOING : FLASH_OP_DONE;
 }
 
 
 
-static void shift_write_context(u32_t shift, struct write_context * w_ctx)
+static void shift_write_context(u32_t shift, struct write_context *w_ctx)
 {
 	w_ctx->flash_addr += shift;
 	w_ctx->data_addr += shift;
 	w_ctx->len -= shift;
 }
 
-static int write_op(void * context)
+static int write_op(void *context)
 {
-	struct write_context * w_ctx = context;
+	struct write_context *w_ctx = context;
 	u32_t addr_word;
 	u32_t tmp_word;
 	u32_t count;
@@ -461,7 +474,9 @@ static int write_op(void * context)
 			count = w_ctx->len;
 		}
 
-		memcpy((u8_t *)&tmp_word + (w_ctx->flash_addr & 0x3), (void *)w_ctx->data_addr, count);
+		memcpy((u8_t *)&tmp_word + (w_ctx->flash_addr & 0x3),
+		       (void *)w_ctx->data_addr,
+		       count);
 		nvmc_wait_ready();
 		*(u32_t *)addr_word = tmp_word;
 
