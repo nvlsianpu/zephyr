@@ -10,6 +10,8 @@
 
 int ll_init(struct k_sem *sem_rx);
 void ll_reset(void);
+void ll_radio_state_abort(void);
+u32_t ll_radio_state_is_idle(void);
 u8_t *ll_addr_get(u8_t addr_type, u8_t *p_bdaddr);
 void ll_addr_set(u8_t addr_type, u8_t const *const p_bdaddr);
 

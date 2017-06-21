@@ -7775,6 +7775,16 @@ static void phy_rsp_send(struct connection *conn)
 }
 #endif /* CONFIG_BLUETOOTH_CONTROLLER_PHY */
 
+void ll_radio_state_abort(void)
+{
+	event_stop(0, 0, 0, (void *)STATE_ABORT);
+}
+
+u32_t ll_radio_state_is_idle(void)
+{
+	return radio_is_idle();
+}
+
 void radio_ticks_active_to_start_set(u32_t ticks_active_to_start)
 {
 	_radio.ticks_active_to_start = ticks_active_to_start;
@@ -9360,21 +9370,3 @@ u32_t radio_tx_mem_enqueue(u16_t handle, struct radio_pdu_node_tx *node_tx)
 void __weak ll_adv_scan_state_cb(u8_t bm)
 {
 }
-
-void radio_state_abort(void)
-{
-	static void *s_link[2];
-	static struct mayfly s_mfy_radio_abort = {0, 0, s_link,
-		NULL, mayfly_radio_stop};
-	u32_t retval;
-
-	/* Radio state ABORT is supplied in params */
-	s_mfy_radio_abort.param = (void *)STATE_ABORT;
-
-	/* Stop Radio Tx/Rx */
-	retval = mayfly_enqueue(RADIO_TICKER_USER_ID_WORKER,
-				RADIO_TICKER_USER_ID_WORKER, 0,
-				&s_mfy_radio_abort);
-	LL_ASSERT(!retval);
-}
-
