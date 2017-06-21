@@ -62,59 +62,6 @@ static int cmd_hrs_simulate(int argc, char *argv[])
 	return 0;
 }
 
-
-
-#include "flash.h"
-
-static int cmd_erase(int argc, char *argv[])
-{
-	struct device *flash_dev;
-	flash_dev = device_get_binding(CONFIG_SOC_FLASH_NRF5_DEV_NAME);
-
-	if (!flash_dev) {
-		printk("Nordic nRF5 flash driver was not found!\n");
-		return -1;
-	}
-
-	flash_write_protection_set(flash_dev, 0);
-
-
-	int result;
-
-	result = flash_erase(flash_dev, 0x40000, 0xf000);
-	printk("%u\n",result);
-	return result;
-}
-
-
-
-static int cmd_flash3(int argc, char *argv[])
-{
-	struct device *flash_dev;
-	flash_dev = device_get_binding(CONFIG_SOC_FLASH_NRF5_DEV_NAME);
-
-	if (!flash_dev) {
-		printk("Nordic nRF5 flash driver was not found!\n");
-		return -1;
-	}
-
-	flash_write_protection_set(flash_dev, 0);
-
-	u8_t buf_array[] = "nordic\n";
-	u8_t check_array[sizeof(buf_array)] = {1};
-
-	if (flash_write(flash_dev, 0x40001, buf_array, sizeof(buf_array)) != 0) {
-		printk("   Flash write failed!\n");
-		return -1;
-	}
-	printk("   Flash write Succed\n");
-
-	flash_read(flash_dev, 0x40001, check_array, sizeof(check_array));
-
-	printk("%s\n", check_array);
-	return 0;
-}
-
 #define HELP_NONE "[none]"
 #define HELP_ADDR_LE "<address: XX:XX:XX:XX:XX:XX> <type: (public|random)>"
 
@@ -132,7 +79,6 @@ void main(void)
 
 	SHELL_REGISTER(MY_SHELL_MODULE, commands);
 	shell_register_default_module(MY_SHELL_MODULE);
-
 
 	while (1) {
 		k_sleep(MSEC_PER_SEC);

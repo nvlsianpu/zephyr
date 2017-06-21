@@ -353,7 +353,6 @@ struct radio_pdu_node_tx *radio_tx_mem_acquire(void);
 void radio_tx_mem_release(struct radio_pdu_node_tx *pdu_data_node_tx);
 u32_t radio_tx_mem_enqueue(u16_t handle,
 			   struct radio_pdu_node_tx *pdu_data_node_tx);
-
 /* Callbacks */
 extern void radio_active_callback(u8_t active);
 extern void radio_event_callback(void);
