@@ -16,19 +16,17 @@
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 #include <misc/__assert.h>
+#include <bluetooth/hci.h>
 #include "controller/ticker/ticker.h"
-#include "controller/hal/radio.h"
 #include "controller/include/ll.h"
-#endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
-#define FLASH_OP_DONE    (0) /* 0 for compilance with the driver API. */
-#define FLASH_OP_ONGOING (-1)
-
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
 #define RADIO_TICKER_IS_INITIALIZED() ticker_is_initialized(0)
 #define FLASH_SLOT     FLASH_PAGE_ERASE_MAX_TIME_US
 #define FLASH_INTERVAL FLASH_SLOT
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
+
+#define FLASH_OP_DONE    (0) /* 0 for compilance with the driver API. */
+#define FLASH_OP_ONGOING (-1)
 
 struct erase_context {
 	u32_t addr; /* Address off the 1st page to erase */
@@ -57,26 +55,21 @@ struct flash_op_desc {
 	int result;
 };
 
-/* semaphore for synchronization of flash opperations */
+/* semaphore for synchronization of flash operations */
 static struct k_sem sem_sync;
-#endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
-/* semaphore for lock flash resorces (tickers) */
-static struct k_sem sem_lock;
-
-static int write(off_t addr, const void *data, size_t len);
-static int erase(u32_t addr, u32_t size);
-
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
 static int write_op(void *context); /* instantation of flash_op_handler */
 static int write_in_timeslice(off_t addr, const void *data, size_t len);
 
 static int erase_op(void *context); /* instantation of flash_op_handler */
 static int erase_in_timeslice(u32_t addr, u32_t size);
-
-extern void radio_state_abort(void); /* BLE controller abort */
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
+/* semaphore for locking flash resources (tickers) */
+static struct k_sem sem_lock;
+
+static int write(off_t addr, const void *data, size_t len);
+static int erase(u32_t addr, u32_t size);
 
 static inline bool is_aligned_32(u32_t data)
 {
@@ -236,7 +229,7 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 	u8_t instance_index;
 	struct flash_op_desc *op_desc;
 
-	if (radio_is_idle()) {
+	if (ll_radio_state_is_idle()) {
 		op_desc = context;
 
 		if (op_desc->handler(op_desc->context)
@@ -261,7 +254,7 @@ static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 			k_sem_give(&sem_sync);
 		}
 	} else {
-		__ASSERT(0, "Radio is on during flash opperation.\n");
+		__ASSERT(0, "Radio is on during flash operation.\n");
 	}
 }
 
@@ -272,10 +265,9 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
 	u8_t ticker_id;
 	int err;
 
+	ll_radio_state_abort();
+
 	ll_timeslice_ticker_id_get(&instance_index, &ticker_id);
-
-
-	radio_state_abort();
 
 	/* start a secondary one-shot ticker after ~ 500 us, */
 	/* this will let any radio role to gracefully release the Radio h/w */
@@ -289,9 +281,9 @@ static void time_slot_callback_helper(u32_t ticks_at_expire, u32_t remainder,
 		0, /* per. remaind. (on-shot) */
 		0, /* lazy, voluntary skips */
 		0,
-		time_slot_callback_work, /* handler for exexute */
-					 /* the flash operiation */
-		context, /* the context for the flash operiation */
+		time_slot_callback_work, /* handler for executing */
+					 /* the flash operation */
+		context, /* the context for the flash operation */
 		NULL, /* no op callback */
 		NULL);
 
@@ -396,7 +388,7 @@ static int erase_op(void *context)
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 	u32_t ticks_diff;
-	u32_t ticks_begin;
+	u32_t ticks_begin = 0;
 	u32_t i = 0;
 
 	if (e_ctx->enable_time_limit) {
@@ -454,7 +446,7 @@ static int write_op(void *context)
 
 #if defined(CONFIG_BLUETOOTH_CONTROLLER)
 	u32_t ticks_diff;
-	u32_t ticks_begin;
+	u32_t ticks_begin = 0;
 	u32_t i = 1;
 
 	if (w_ctx->enable_time_limit) {
