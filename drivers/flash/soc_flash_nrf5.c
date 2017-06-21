@@ -14,7 +14,7 @@
 #include <flash.h>
 #include <string.h>
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 #include <misc/__assert.h>
 #include <bluetooth/hci.h>
 #include "controller/ticker/ticker.h"
@@ -23,7 +23,7 @@
 #define RADIO_TICKER_IS_INITIALIZED() ticker_is_initialized(0)
 #define FLASH_SLOT     FLASH_PAGE_ERASE_MAX_TIME_US
 #define FLASH_INTERVAL FLASH_SLOT
-#endif /* CONFIG_BLUETOOTH_CONTROLLER */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
 
 #define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
 #define FLASH_OP_ONGOING (-1)
@@ -31,7 +31,7 @@
 struct erase_context {
 	u32_t addr; /* Address off the 1st page to erase */
 	u32_t size; /* Size off area to erase [B] */
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	u8_t enable_time_limit; /* execution limited to timeslot */
 #endif
 }; /*< Context type for f. @ref erase_op */
@@ -40,17 +40,17 @@ struct write_context {
 	u32_t data_addr;
 	u32_t flash_addr; /* Address off the 1st page to erase */
 	u32_t len;        /* Size off data to write [B] */
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	u8_t  enable_time_limit; /* execution limited to timeslot*/
 #endif
 }; /*< Context type for f. @ref write_op */
 
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
-typedef int (*flash_op_handler) (void *context);
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+typedef int (*flash_op_handler_t) (void *context);
 
 struct flash_op_desc {
-	flash_op_handler handler;
+	flash_op_handler_t handler;
 	void *context; /* [in,out] */
 	int result;
 };
@@ -58,12 +58,12 @@ struct flash_op_desc {
 /* semaphore for synchronization of flash operations */
 static struct k_sem sem_sync;
 
-static int write_op(void *context); /* instance of flash_op_handler */
+static int write_op(void *context); /* instance of flash_op_handler_t */
 static int write_in_timeslice(off_t addr, const void *data, size_t len);
 
-static int erase_op(void *context); /* instance of flash_op_handler */
+static int erase_op(void *context); /* instance of flash_op_handler_t */
 static int erase_in_timeslice(u32_t addr, u32_t size);
-#endif /* CONFIG_BLUETOOTH_CONTROLLER */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
 
 /* semaphore for locking flash resources (tickers) */
 static struct k_sem sem_lock;
@@ -125,7 +125,7 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 
 	k_sem_take(&sem_lock, K_FOREVER);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = write_in_timeslice(addr, data, len);
 	} else
@@ -162,7 +162,7 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 
 	k_sem_take(&sem_lock, K_FOREVER);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = erase_in_timeslice(addr, size);
 	} else
@@ -207,7 +207,7 @@ static int nrf5_flash_init(struct device *dev)
 
 	k_sem_init(&sem_lock, 1, 1);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	k_sem_init(&sem_sync, 0, 1);
 #endif
 
@@ -218,7 +218,7 @@ DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 	     NULL, NULL, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
 
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 
 static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 		u16_t lazy,
@@ -377,7 +377,7 @@ static int write_in_timeslice(off_t addr, const void *data, size_t len)
 	return  work_in_time_slice(&flash_op_desc);
 }
 
-#endif /* CONFIG_BLUETOOTH_CONTROLLER */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
 
 
 
@@ -386,7 +386,7 @@ static int erase_op(void *context)
 	u32_t pg_size           = NRF_FICR->CODEPAGESIZE;
 	struct erase_context *e_ctx = context;
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	u32_t ticks_diff;
 	u32_t ticks_begin = 0;
 	u32_t i = 0;
@@ -408,7 +408,7 @@ static int erase_op(void *context)
 		e_ctx->size -= pg_size;
 		e_ctx->addr += pg_size;
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 		i++;
 
 		if (e_ctx->enable_time_limit) {
@@ -445,7 +445,7 @@ static int write_op(void *context)
 	u32_t tmp_word;
 	u32_t count;
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 	u32_t ticks_diff;
 	u32_t ticks_begin = 0;
 	u32_t i = 1;
@@ -475,7 +475,7 @@ static int write_op(void *context)
 
 		shift_write_context(count, w_ctx);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 		if (w_ctx->enable_time_limit) {
 
 			ticks_diff = ticker_ticks_now_get() - ticks_begin;
@@ -495,7 +495,7 @@ static int write_op(void *context)
 
 		shift_write_context(sizeof(u32_t), w_ctx);
 
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 		i++;
 
 		if (w_ctx->enable_time_limit) {
@@ -531,7 +531,7 @@ static int erase(u32_t addr, u32_t size)
 	struct erase_context context = {
 			addr,
 			size,
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 			0 /* disable time limit */
 #endif
 	};
@@ -546,7 +546,7 @@ static int write(off_t addr, const void *data, size_t len)
 			(u32_t) data,
 			addr,
 			len,
-#if defined(CONFIG_BLUETOOTH_CONTROLLER)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
 			0 /* enable time limit */
 #endif
 	};

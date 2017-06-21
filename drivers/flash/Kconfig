@@ -130,6 +130,13 @@ config SOC_FLASH_NRF5_DEV_NAME
 	help
 	  Specify the device name for the flash driver.
 
+config SOC_FLASH_NRF5_RADIO_SYNCH
+	bool "Nordic nRF5X flash driver synchronized with radio"
+	depends on SOC_FLASH_NRF5 && BLUETOOTH_CONTROLLER
+	default y
+	help
+	  Enable mode in which flash driver could be using along with radio.
+
 config SOC_FLASH_MCUX
 	bool "MCUX flash shim driver"
 	depends on FLASH && HAS_MCUX
