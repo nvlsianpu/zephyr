@@ -55,7 +55,7 @@ static int cmd_erase(int argc, char *argv[])
 	result = flash_erase(flash_dev, page_addr, size);
 
 	if (result) {
-		printk("Erase falied, code %u\n", result);
+		printk("Erase Failed, code %d\n", result);
 	} else {
 		printk("Erase success\n");
 	}
@@ -84,7 +84,7 @@ static int cmd_flash(int argc, char *argv[])
 
 
 	if (argc <= 2) {
-		printk("Type data to be writen!\n");
+		printk("Type data to be written!\n");
 		return -1;
 	}
 
@@ -188,15 +188,16 @@ static int cmd_test(int argc, char *argv[])
 		arr[i] = (u8_t) i;
 	}
 
+
 	while (repeat--) {
 		result = flash_erase(flash_dev, addr, size);
 
 		if (result) {
-			printk("Erase falied, code %u\n", result);
+			printk("Erase Failed, code %d\n", result);
 			return -1;
 		}
 
-		printk("Erase success\n");
+		printk("Erase OK.\n");
 
 		if (flash_write(flash_dev, addr, arr, size) != 0) {
 			printk("Write internal ERROR!\n");
@@ -207,7 +208,7 @@ static int cmd_test(int argc, char *argv[])
 
 	}
 
-	printk("Erase-write test done.\n");
+	printk("Erase-Write test done.\n");
 
 	return 0;
 }

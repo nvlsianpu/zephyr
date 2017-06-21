@@ -25,7 +25,7 @@
 #define FLASH_INTERVAL FLASH_SLOT
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
-#define FLASH_OP_DONE    (0) /* 0 for compilance with the driver API. */
+#define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
 #define FLASH_OP_ONGOING (-1)
 
 struct erase_context {
@@ -58,10 +58,10 @@ struct flash_op_desc {
 /* semaphore for synchronization of flash operations */
 static struct k_sem sem_sync;
 
-static int write_op(void *context); /* instantation of flash_op_handler */
+static int write_op(void *context); /* instance of flash_op_handler */
 static int write_in_timeslice(off_t addr, const void *data, size_t len);
 
-static int erase_op(void *context); /* instantation of flash_op_handler */
+static int erase_op(void *context); /* instance of flash_op_handler */
 static int erase_in_timeslice(u32_t addr, u32_t size);
 #endif /* CONFIG_BLUETOOTH_CONTROLLER */
 
@@ -317,7 +317,7 @@ static int work_in_time_slice(struct flash_op_desc *p_flash_op_desc)
 			      /* (MAYFLY_CALL_ID_PROGRAM) */
 			   ticker_id, /* flash ticker id */
 			   ticker_ticks_now_get(), /* current tick */
-			   0, /* first int. immedetely */
+			   0, /* first int. immediately */
 			   TICKER_US_TO_TICKS(FLASH_INTERVAL), /* periodic */
 			   TICKER_REMAINDER(FLASH_INTERVAL), /* per. remaind.*/
 			   0, /* lazy, voluntary skips */
@@ -396,6 +396,7 @@ static int erase_op(void *context)
 	}
 #endif
 
+	u32_t prev_nvmc_cfg = NRF_NVMC->CONFIG;
 	/* Erase uses a specific configuration register */
 	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
 	nvmc_wait_ready();
@@ -422,7 +423,7 @@ static int erase_op(void *context)
 
 	} while (e_ctx->size > 0);
 
-	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Ren << NVMC_CONFIG_WEN_Pos;
+	NRF_NVMC->CONFIG = prev_nvmc_cfg;
 	nvmc_wait_ready();
 
 	return (e_ctx->size > 0) ? FLASH_OP_ONGOING : FLASH_OP_DONE;
