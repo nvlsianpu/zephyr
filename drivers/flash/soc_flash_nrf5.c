@@ -14,7 +14,7 @@
 #include <flash.h>
 #include <string.h>
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 #include <misc/__assert.h>
 #include <bluetooth/hci.h>
 #include "controller/ticker/ticker.h"
@@ -23,7 +23,7 @@
 #define RADIO_TICKER_IS_INITIALIZED() ticker_is_initialized(0)
 #define FLASH_SLOT     FLASH_PAGE_ERASE_MAX_TIME_US
 #define FLASH_INTERVAL FLASH_SLOT
-#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 #define FLASH_OP_DONE    (0) /* 0 for compliance with the driver API. */
 #define FLASH_OP_ONGOING (-1)
@@ -31,22 +31,22 @@
 struct erase_context {
 	u32_t addr; /* Address off the 1st page to erase */
 	u32_t size; /* Size off area to erase [B] */
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	u8_t enable_time_limit; /* execution limited to timeslot */
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 }; /*< Context type for f. @ref erase_op */
 
 struct write_context {
 	u32_t data_addr;
 	u32_t flash_addr; /* Address off the 1st page to erase */
 	u32_t len;        /* Size off data to write [B] */
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	u8_t  enable_time_limit; /* execution limited to timeslot*/
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 }; /*< Context type for f. @ref write_op */
 
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 typedef int (*flash_op_handler_t) (void *context);
 
 struct flash_op_desc {
@@ -63,7 +63,7 @@ static int write_in_timeslice(off_t addr, const void *data, size_t len);
 
 static int erase_op(void *context); /* instance of flash_op_handler_t */
 static int erase_in_timeslice(u32_t addr, u32_t size);
-#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 /* semaphore for locking flash resources (tickers) */
 static struct k_sem sem_lock;
@@ -125,11 +125,11 @@ static int flash_nrf5_write(struct device *dev, off_t addr,
 
 	k_sem_take(&sem_lock, K_FOREVER);
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = write_in_timeslice(addr, data, len);
 	} else
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	{
 		ret = write(addr, data, len);
 	}
@@ -162,11 +162,11 @@ static int flash_nrf5_erase(struct device *dev, off_t addr, size_t size)
 
 	k_sem_take(&sem_lock, K_FOREVER);
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	if (RADIO_TICKER_IS_INITIALIZED()) {
 		ret = erase_in_timeslice(addr, size);
 	} else
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	{
 		ret = erase(addr, size);
 	}
@@ -207,9 +207,9 @@ static int nrf5_flash_init(struct device *dev)
 
 	k_sem_init(&sem_lock, 1, 1);
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	k_sem_init(&sem_sync, 0, 1);
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 	return 0;
 }
@@ -218,7 +218,7 @@ DEVICE_INIT(nrf5_flash, CONFIG_SOC_FLASH_NRF5_DEV_NAME, nrf5_flash_init,
 	     NULL, NULL, POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE);
 
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 
 static void time_slot_callback_work(u32_t ticks_at_expire, u32_t remainder,
 		u16_t lazy,
@@ -377,7 +377,7 @@ static int write_in_timeslice(off_t addr, const void *data, size_t len)
 	return  work_in_time_slice(&flash_op_desc);
 }
 
-#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH */
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 
 
@@ -386,7 +386,7 @@ static int erase_op(void *context)
 	u32_t pg_size           = NRF_FICR->CODEPAGESIZE;
 	struct erase_context *e_ctx = context;
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	u32_t ticks_diff;
 	u32_t ticks_begin = 0;
 	u32_t i = 0;
@@ -394,7 +394,7 @@ static int erase_op(void *context)
 	if (e_ctx->enable_time_limit) {
 		ticks_begin = ticker_ticks_now_get();
 	}
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 	u32_t prev_nvmc_cfg = NRF_NVMC->CONFIG;
 	/* Erase uses a specific configuration register */
@@ -408,7 +408,7 @@ static int erase_op(void *context)
 		e_ctx->size -= pg_size;
 		e_ctx->addr += pg_size;
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 		i++;
 
 		if (e_ctx->enable_time_limit) {
@@ -419,7 +419,7 @@ static int erase_op(void *context)
 				break;
 			}
 		}
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 	} while (e_ctx->size > 0);
 
@@ -445,7 +445,7 @@ static int write_op(void *context)
 	u32_t tmp_word;
 	u32_t count;
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 	u32_t ticks_diff;
 	u32_t ticks_begin = 0;
 	u32_t i = 1;
@@ -453,7 +453,7 @@ static int write_op(void *context)
 	if (w_ctx->enable_time_limit) {
 		ticks_begin = ticker_ticks_now_get();
 	}
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 
 	/* Start with a word-aligned address and handle the offset */
 	addr_word = (u32_t)w_ctx->flash_addr & ~0x3;
@@ -475,7 +475,7 @@ static int write_op(void *context)
 
 		shift_write_context(count, w_ctx);
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 		if (w_ctx->enable_time_limit) {
 
 			ticks_diff = ticker_ticks_now_get() - ticks_begin;
@@ -485,7 +485,7 @@ static int write_op(void *context)
 				return FLASH_OP_ONGOING;
 			}
 		}
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	}
 
 	/* Write all the 4-byte aligned data */
@@ -495,7 +495,7 @@ static int write_op(void *context)
 
 		shift_write_context(sizeof(u32_t), w_ctx);
 
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 		i++;
 
 		if (w_ctx->enable_time_limit) {
@@ -507,7 +507,7 @@ static int write_op(void *context)
 				return FLASH_OP_ONGOING;
 			}
 		}
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	}
 
 	/* Write remaining data */
@@ -531,9 +531,9 @@ static int erase(u32_t addr, u32_t size)
 	struct erase_context context = {
 			addr,
 			size,
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 			0 /* disable time limit */
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	};
 
 	return	erase_op(&context);
@@ -546,9 +546,9 @@ static int write(off_t addr, const void *data, size_t len)
 			(u32_t) data,
 			addr,
 			len,
-#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNCH)
+#if defined(CONFIG_SOC_FLASH_NRF5_RADIO_SYNC)
 			0 /* enable time limit */
-#endif
+#endif /* CONFIG_SOC_FLASH_NRF5_RADIO_SYNC */
 	};
 
 	return write_op(&context);
