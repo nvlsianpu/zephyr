@@ -42,8 +42,13 @@
 /* memory for storing Random number */
 static u8_t MALIGN(4) _rand_context[3 + 4 + 1];
 
+#ifdef CONFIG_SOC_FLASH_NRF5_RADIO_SYNC
 /* memory for ticker nodes/instances */
 #define FLASH_TICKER_NODES 1 /* No. of tickers reserved for flashing */
+#else
+#define FLASH_TICKER_NODES 0
+#endif
+
 #define TICKER_NODES       (RADIO_TICKER_NODES + FLASH_TICKER_NODES)
 static u8_t MALIGN(4) _ticker_nodes[TICKER_NODES][TICKER_NODE_T_SIZE];
 
@@ -52,7 +57,7 @@ static u8_t MALIGN(4) _ticker_users[MAYFLY_CALLER_COUNT]
 						[TICKER_USER_T_SIZE];
 
 /* memory for user/context simultaneous API operations */
-static u8_t MALIGN(4) _ticker_user_ops[RADIO_TICKER_USER_OPS+1]
+static u8_t MALIGN(4) _ticker_user_ops[RADIO_TICKER_USER_OPS]
 						[TICKER_USER_OP_T_SIZE];
 
 /* memory for Bluetooth Controller (buffers, queues etc.) */
