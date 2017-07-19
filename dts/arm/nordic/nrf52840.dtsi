@@ -14,7 +14,9 @@
 	};
 
 	flash0: flash {
+		compatible = "arm";
 		reg = <0x00000000 DT_FLASH_SIZE>;
+		write-block-size = <4>;
 	};
 
 	sram0: memory {

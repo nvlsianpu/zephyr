@@ -1,0 +1,26 @@
+---
+title: Flash base node description
+id: flash
+version: 0.1
+
+description: >
+    This binding gives a base FLASH description
+
+properties:
+  - compatible:
+      type: string
+      category: optional
+      description: compatible strings
+      constraint: "arm", "intel"
+
+  - write-block-size:
+     type: int
+     description: flash write alignment
+     generation: define
+     category: optional
+     label: alignment
+
+base_label: FLASH
+use-property-label: yes
+
+...
