@@ -9,9 +9,9 @@ description: >
 properties:
   - compatible:
       type: string
-      category: optional
+      category: required
       description: compatible strings
-      constraint: "arm", "intel"
+      constraint: "flash"
 
   - write-block-size:
      type: int
