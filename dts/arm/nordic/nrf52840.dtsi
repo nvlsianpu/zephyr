@@ -13,11 +13,23 @@
 		};
 	};
 
-	flash0: flash {
-		compatible = "arm";
-		reg = <0x00000000 DT_FLASH_SIZE>;
-		write-block-size = <4>;
+
+
+
+	flash-controller@0x4001E000 {
+			compatible = "nrf,nrf52-flash-controller";
+			reg = <0x4001E000 0x550>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			flash0: flash {
+				reg = <0x00000000 DT_FLASH_SIZE>;
+				write-block-size = <4>;
+			};
 	};
+
+
 
 	sram0: memory {
 		reg = <0x20000000 DT_SRAM_SIZE>;
