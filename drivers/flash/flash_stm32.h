@@ -7,7 +7,7 @@
 
 #ifndef DRIVERS_FLASH_STM32_H
 #define DRIVERS_FLASH_STM32_H
-
+#include <flash.h>
 #include <flash_registers.h>
 
 #if defined(CONFIG_SOC_SERIES_STM32F4X)
@@ -35,8 +35,8 @@ bool flash_stm32_valid_range(off_t offset, u32_t len, bool write);
 int flash_stm32_write_range(unsigned int offset, const void *data,
 			    unsigned int len, struct flash_stm32_priv *p);
 
-int flash_stm32_block_erase_loop(unsigned int offset, unsigned int len,
-				 struct flash_stm32_priv *p);
+int flash_stm32_block_erase_loop(struct device *dev, unsigned int offset,
+				 unsigned int len, struct flash_stm32_priv *p);
 
 void flash_stm32_flush_caches(struct flash_stm32_priv *p);
 
@@ -48,5 +48,11 @@ int flash_stm32_erase(struct device *dev, off_t offset, size_t len);
 
 int flash_stm32_write(struct device *dev, off_t offset,
 		      const void *data, size_t len);
+
+#if defined(CONFIG_SOC_SERIES_STM32F4X)
+void flash_stm32_pages_layout(struct device *dev,
+				     const struct flash_pages_layout **layout,
+				     size_t *layout_size);
+#endif /* CONFIG_SOC_SERIES_STM32F4X */
 
 #endif /* DRIVERS_FLASH_STM32_H */

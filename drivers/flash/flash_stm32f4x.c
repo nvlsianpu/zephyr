@@ -79,14 +79,20 @@ static int erase_sector(u16_t sector, struct flash_stm32_priv *p)
 	return rc;
 }
 
-int flash_stm32_block_erase_loop(unsigned int offset, unsigned int len,
-				 struct flash_stm32_priv *p)
+int flash_stm32_block_erase_loop(struct device *dev, unsigned int offset,
+				 unsigned int len, struct flash_stm32_priv *p)
 {
-	int i, rc = 0;
+	struct flash_pages_info info;
+	int idx, rc = 0;
 
-	i = stm32f4x_get_sector(offset);
-	for (; i <= stm32f4x_get_sector(offset + len - 1); i++) {
-		rc = erase_sector(i, p);
+	rc = flash_get_page_info_by_offs(dev, offset, &info);
+	idx = info.index; /* First sector's index to be earsed. */
+
+	rc = flash_get_page_info_by_offs(dev, offset + len - 1, &info);
+	/* Now info.index has value of last sector's index to be earsed. */
+
+	for (; idx <= info.index; idx++) {
+		rc = erase_sector(idx, p);
 		if (rc < 0) {
 			break;
 		}
@@ -109,4 +115,22 @@ int flash_stm32_write_range(unsigned int offset, const void *data,
 	}
 
 	return rc;
+}
+
+static const struct flash_pages_layout stm32f4xx_sectors_desc[] = {
+	{.pages_count = 4, .pages_size = KB(16)},
+	{.pages_count = 1, .pages_size = KB(64)},
+#ifdef CONFIG_SOC_STM32F401XE
+	{.pages_count = 3, .pages_size = KB(128)},
+#else
+	{.pages_count = 2, .pages_size = KB(128)},
+#endif
+};
+
+void flash_stm32_pages_layout(struct device *dev,
+			      const struct flash_pages_layout **layout,
+			      size_t *layout_size)
+{
+	*layout = stm32f4xx_sectors_desc;
+	*layout_size = ARRAY_SIZE(stm32f4xx_sectors_desc);
 }

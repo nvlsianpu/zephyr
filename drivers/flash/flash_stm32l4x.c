@@ -120,8 +120,8 @@ static int erase_page(unsigned int page, struct flash_stm32_priv *p)
 	return rc;
 }
 
-int flash_stm32_block_erase_loop(unsigned int offset, unsigned int len,
-				 struct flash_stm32_priv *p)
+int flash_stm32_block_erase_loop(struct device *dev, unsigned int offset,
+				 unsigned int len, struct flash_stm32_priv *p)
 {
 	int i, rc = 0;
 
