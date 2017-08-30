@@ -49,7 +49,7 @@ int flash_stm32_erase(struct device *dev, off_t offset, size_t len);
 int flash_stm32_write(struct device *dev, off_t offset,
 		      const void *data, size_t len);
 
-#if defined(CONFIG_SOC_SERIES_STM32F4X)
+#if defined(CONFIG_FLASH_PAGE_LAYOUT)
 void flash_stm32_pages_layout(struct device *dev,
 				     const struct flash_pages_layout **layout,
 				     size_t *layout_size);
