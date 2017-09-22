@@ -162,4 +162,15 @@ config SOC_FLASH_MCUX_DEV_NAME
 	help
 	  Specify the device name for the flash driver.
 
+config DRIVER_FLASH_WRITE_BLOCK_SIZE
+	int "Minimum write block size supported by the driver"
+	depends on FLASH
+	range 1 1 if SOC_FLASH_NRF5
+	range 4 4 if SOC_FLASH_STM32
+	range 4 4 if SOC_FLASH_QMSI
+	range -1 -1
+	help
+	 The minimum write block size in Bytes supported by the SoC flash driver.
+	 It is Set to -1 if not specified jet.
+
 source "drivers/flash/Kconfig.stm32"
