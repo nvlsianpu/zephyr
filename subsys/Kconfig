@@ -30,3 +30,5 @@ source "subsys/dfu/Kconfig"
 source "subsys/random/Kconfig"
 
 source "subsys/flash_map/Kconfig"
+
+source "subsys/fcb/Kconfig"
