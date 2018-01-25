@@ -171,7 +171,7 @@ static void spi_stm32_complete(struct spi_stm32_data *data, SPI_TypeDef *spi,
 
 	spi_context_cs_control(&data->ctx, false);
 
-#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
+#if defined(CONFIG_SPI_STM32_HAS_FIFO)
 	/* Flush RX buffer */
 	while (LL_SPI_IsActiveFlag_RXNE(spi)) {
 		(void) LL_SPI_ReceiveData8(spi);
@@ -266,13 +266,13 @@ static int spi_stm32_configure(struct spi_config *config)
 	LL_SPI_Disable(spi);
 	LL_SPI_SetBaudRatePrescaler(spi, scaler[br - 1]);
 
-	if (SPI_MODE_GET(config->operation) ==  SPI_MODE_CPOL) {
+	if (SPI_MODE_GET(config->operation) & SPI_MODE_CPOL) {
 		LL_SPI_SetClockPolarity(spi, LL_SPI_POLARITY_HIGH);
 	} else {
 		LL_SPI_SetClockPolarity(spi, LL_SPI_POLARITY_LOW);
 	}
 
-	if (SPI_MODE_GET(config->operation) == SPI_MODE_CPHA) {
+	if (SPI_MODE_GET(config->operation) & SPI_MODE_CPHA) {
 		LL_SPI_SetClockPhase(spi, LL_SPI_PHASE_2EDGE);
 	} else {
 		LL_SPI_SetClockPhase(spi, LL_SPI_PHASE_1EDGE);
@@ -310,7 +310,7 @@ static int spi_stm32_configure(struct spi_config *config)
 		LL_SPI_SetDataWidth(spi, LL_SPI_DATAWIDTH_16BIT);
 	}
 
-#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
+#if defined(CONFIG_SPI_STM32_HAS_FIFO)
 	LL_SPI_SetRxFIFOThreshold(spi, LL_SPI_RX_FIFO_TH_QUARTER);
 #endif
 	LL_SPI_SetStandard(spi, LL_SPI_PROTOCOL_MOTOROLA);
@@ -371,7 +371,7 @@ static int transceive(struct spi_config *config,
 	spi_context_buffers_setup(&data->ctx, tx_bufs, tx_count,
 				  rx_bufs, rx_count, 1);
 
-#if defined(CONFIG_SOC_SERIES_STM32L4X) || defined(CONFIG_SOC_SERIES_STM32F3X)
+#if defined(CONFIG_SPI_STM32_HAS_FIFO)
 	/* Flush RX buffer */
 	while (LL_SPI_IsActiveFlag_RXNE(spi)) {
 		(void) LL_SPI_ReceiveData8(spi);
@@ -467,8 +467,13 @@ static void spi_stm32_irq_config_func_1(struct device *port);
 static const struct spi_stm32_config spi_stm32_cfg_1 = {
 	.spi = (SPI_TypeDef *) SPI1_BASE,
 	.pclken = {
+#ifdef CONFIG_SOC_SERIES_STM32F0X
+		.enr = LL_APB1_GRP2_PERIPH_SPI1,
+		.bus = STM32_CLOCK_BUS_APB1_2
+#else
 		.enr = LL_APB2_GRP1_PERIPH_SPI1,
 		.bus = STM32_CLOCK_BUS_APB2
+#endif
 	},
 #ifdef CONFIG_SPI_STM32_INTERRUPT
 	.irq_config = spi_stm32_irq_config_func_1,

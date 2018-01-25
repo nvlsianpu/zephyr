@@ -166,8 +166,8 @@ must be installed.
       You only need to do this once after cloning the git repository.
 
 Now that the host tools are installed, a 3rd party cross compiler must
-be installed. See :ref:`below <third_party_x_compilers>` for
-installing a cross compiler.
+be installed. See `Using Custom and 3rd Party Cross Compilers`_ for
+details.
 
 .. _third_party_x_compilers:
 
@@ -176,8 +176,8 @@ Using Custom and 3rd Party Cross Compilers
 
 To use a 3rd party cross compiler that is not provided by the Zephyr
 SDK, follow the steps below. It is possible to use a 3rd party cross
-compiler and still use the Zephyr SDK's host tools. See :ref:`the
-section above <sdkless_builds>` for details.
+compiler and still use the Zephyr SDK's host tools. See `Building
+without the Zephyr SDK`_ for details.
 
 #. We will use the `GCC ARM Embedded`_ compiler for this example, download the
    package suitable for your operating system from the `GCC ARM Embedded`_ website
@@ -225,3 +225,33 @@ rely on testing in the QEMU emulation environment only.
 
 
 .. _GCC ARM Embedded: https://launchpad.net/gcc-arm-embedded
+
+Running a Sample Application natively (POSIX OS)
+================================================
+
+It is also possible to compile some of the sample and test applications to run
+as native process on a POSIX OS (e.g. Linux).
+To be able to do this, remember to have installed the 32 bit libC if your OS is
+natively 64bit.
+
+To compile and run an application in this way, type:
+
+.. code-block:: console
+
+   $ cd $ZEPHYR_BASE/samples/hello_world
+   $ mkdir build && cd build
+   $ cmake -DBOARD=native_posix ..
+   $ make
+
+and then:
+
+.. code-block:: console
+
+   $ make run
+   # or just:
+   $ zephyr/zephyr.exe
+   # Press Ctrl+C to exit
+
+This executable can be instrumented like any other Linux process. For ex. with gdb
+or valgrind.
+Note that the native port is currently only tested in Linux.

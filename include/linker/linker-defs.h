@@ -36,6 +36,8 @@
 /* Nothing yet to include */
 #elif defined(CONFIG_XTENSA)
 /* Nothing yet to include */
+#elif defined(CONFIG_ARCH_POSIX)
+/* Nothing yet to include */
 #else
 #error Arch not supported.
 #endif
@@ -113,8 +115,8 @@
    archives like KBuild did.*/
 #endif
 
-#define X(i, j)  KERNEL_OBJECT_FILE_##i (j)
-#define Y(i, j) *KERNEL_OBJECT_FILE_##i
+#define X(i, j) KERNEL_OBJECT_FILE_##i (j)
+#define Y(i, j) KERNEL_OBJECT_FILE_##i
 
 #define KERNEL_INPUT_SECTION(sect) \
     UTIL_LISTIFY(NUM_KERNEL_OBJECT_FILES, X, sect)
