@@ -1,0 +1,85 @@
+#
+# Copyright (c) 2018 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+menuconfig CFGSYS
+	bool
+	default n
+	prompt "Enable nonvolatile configuration system"
+	depends on FILE_SYSTEM_NFFS || FCB
+	select NEWLIB_LIBC
+	select MBEDTLS
+	help
+	  need text for help
+
+choice
+	prompt "storage back-end"
+	default CFGSYS_FCB if CONFIG_FCB
+	depends on CFGSYS
+	help
+	  Choice storage back-end which will be used by configuration system.
+
+config CFGSYS_FCB
+	bool "FCB"
+	depends on FCB
+	help
+	  Use FCB as storage back-end.
+
+config CFGSYS_FS
+	bool "file system"
+	depends on FILE_SYSTEM
+	help
+	  Use file system as storage back-end.
+endchoice
+
+config CFGSYS_FCB_NUM_AREAS
+	int
+	default 8
+	depends on CFGSYS && CFGSYS_FCB
+	prompt "Number of flash areas used by the configuration system "
+	help
+	  Number of areas to allocate in the configuration FCB. A smaller number is
+	  used if the flash hardware cannot support this value.
+
+config CFGSYS_FCB_MAGIC
+	hex
+	prompt "FCB magic for the configuration system"
+	default 0xc0ffeeee
+	depends on CFGSYS && CFGSYS_FCB
+	help
+	  Magic 32-bit word for to identify valid configuration area'
+
+config CFGSYS_FCB_FLASH_AREA
+	int
+	prompt "flash area id used for configuration"
+	default 4
+	depends on CFGSYS && CFGSYS_FCB
+	help
+	  Id of the Flash area where FCB instance used for configuration is
+	  expected to operate.
+
+config CFGSYS_FS_DIR
+	string
+	prompt "configuration directory"
+	default "/cfg"
+	depends on CFGSYS && CFGSYS_FS
+	help
+	  Directory where configuration is stored
+
+config CFGSYS_FS_FILE
+	string
+	prompt "default configuration file"
+	default "/cfg/run"
+	depends on CFGSYS && CFGSYS_FS
+	help
+	  Full path to the default configuration file.
+
+config CFGSYS_FS_MAX_LINES
+	int
+	prompt "compression threshold"
+	default 32
+	depends on CFGSYS && CFGSYS_FS
+	help
+	  'Limit how many items stored in file before compressing'
