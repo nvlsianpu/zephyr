@@ -489,6 +489,24 @@ int fs_statvfs(struct fs_statvfs *stat)
 	return -ENOTSUP;
 }
 
+int fs_rename(const char *from, const char *to)
+{
+	int rc;
+
+	k_mutex_lock(&nffs_lock, K_FOREVER);
+
+	if (!nffs_misc_ready()) {
+		k_mutex_unlock(&nffs_lock);
+		return -ENODEV;
+	}
+
+	rc = nffs_path_rename(from, to);
+
+	k_mutex_unlock(&nffs_lock);
+
+	return translate_error(rc);
+}
+
 static int fs_init(struct device *dev)
 {
 	struct nffs_area_desc descs[CONFIG_NFFS_FILESYSTEM_MAX_AREAS + 1];
