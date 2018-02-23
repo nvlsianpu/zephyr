@@ -325,6 +325,26 @@ int fs_stat(const char *path, struct fs_dirent *entry);
 int fs_statvfs(struct fs_statvfs *stat);
 
 /**
+ * @brief File o directory rename
+ *
+ * Performs a rename and / or move of the specified source path to the
+ * specified destination.  The source path can refer to either a file or a
+ * directory.  All intermediate directories in the destination path must
+ * already exist.  If the source path refers to a file, the destination path
+ * must contain a full filename path, rather than just the new parent
+ * directory.  If an object already exists at the specified destination path,
+ * this function causes it to be unlinked prior to the rename (i.e., the
+ * destination gets clobbered).
+ *
+ * @param from The source path.
+ * @param to The destination path.
+ *
+ * @return 0 Success;
+ * @retval -ERRNO errno code if error
+ */
+int fs_rename(const char *from, const char *to);
+
+/**
  * @}
  */
 
