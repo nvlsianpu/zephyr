@@ -123,6 +123,9 @@ void main(void)
 #ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
 	stat_mgmt_register_group();
 #endif
+#ifdef CONFIG_NV_CONFIG_SYSTEM_MCUMGR
+	conf_nmgr_register();
+#endif
 
 	/* Enable Bluetooth. */
 	rc = bt_enable(bt_ready);

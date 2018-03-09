@@ -83,3 +83,9 @@ config NV_CONFIG_NFFS_MAX_LINES
 	depends on NV_CONFIG_SYSTEM && NV_CONFIG_FS
 	help
 	  'Limit how many items stored in file before compressing'
+
+config NV_CONFIG_SYSTEM_MCUMGR
+	bool
+	prompt "the lord of the configuration"
+	depends on NV_CONFIG_SYSTEM
+	default y

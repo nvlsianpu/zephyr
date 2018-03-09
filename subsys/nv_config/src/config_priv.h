@@ -15,8 +15,8 @@ extern "C" {
 int conf_cli_register(void);
 int conf_nmgr_register(void);
 
-struct mgmt_cbuf;
-int conf_cbor_line(struct mgmt_cbuf *cb, char *name, int nlen, char *value,
+struct mgmt_ctxt;
+int conf_cbor_line(struct mgmt_ctxt *cb, char *name, int nlen, char *value,
 		   int vlen);
 
 int conf_line_parse(char *buf, char **namep, char **valp);

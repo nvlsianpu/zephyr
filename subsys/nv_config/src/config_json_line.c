@@ -5,16 +5,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "syscfg/syscfg.h"
-
-#if MYNEWT_VAL(CONFIG_NEWTMGR)
-
 #include "config/config.h"
 #include "config_priv.h"
 #include "cborattr/cborattr.h"
 #include "mgmt/mgmt.h"
 
-int conf_cbor_line(struct mgmt_cbuf *cb, char *name, int nlen, char *value,
+int conf_cbor_line(struct mgmt_ctxt *cb, char *name, int nlen, char *value,
 		   int vlen)
 {
 	const struct cbor_attr_t val_attr[3] = {
@@ -42,5 +38,3 @@ int conf_cbor_line(struct mgmt_cbuf *cb, char *name, int nlen, char *value,
 	}
 	return 0;
 }
-
-#endif

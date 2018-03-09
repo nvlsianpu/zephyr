@@ -5,19 +5,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "syscfg/syscfg.h"
-
-#if MYNEWT_VAL(CONFIG_NEWTMGR)
-
 #include <string.h>
 
-#include "mgmt/mgmt.h"
+#include <limits.h>
 #include "cborattr/cborattr.h"
+#include "mgmt/mgmt.h"
+
 #include "config/config.h"
 #include "config_priv.h"
 
-static int conf_nmgr_read(struct mgmt_cbuf *);
-static int conf_nmgr_write(struct mgmt_cbuf *);
+static int conf_nmgr_read(struct mgmt_ctxt *);
+static int conf_nmgr_write(struct mgmt_ctxt *);
 
 static const struct mgmt_handler conf_nmgr_handlers[] = {
 	[CONF_NMGR_OP] = { conf_nmgr_read, conf_nmgr_write}
@@ -29,7 +27,7 @@ static struct mgmt_group conf_nmgr_group = {
 	.mg_group_id = MGMT_GROUP_ID_CONFIG
 };
 
-static int conf_nmgr_read(struct mgmt_cbuf *cb)
+static int conf_nmgr_read(struct mgmt_ctxt *cb)
 {
 	int rc;
 	char name_str[CONF_MAX_NAME_LEN];
@@ -68,7 +66,7 @@ static int conf_nmgr_read(struct mgmt_cbuf *cb)
 	return 0;
 }
 
-static int conf_nmgr_write(struct mgmt_cbuf *cb)
+static int conf_nmgr_write(struct mgmt_ctxt *cb)
 {
 	int rc;
 	char name_str[CONF_MAX_NAME_LEN];
@@ -95,6 +93,5 @@ static int conf_nmgr_write(struct mgmt_cbuf *cb)
 int
 conf_nmgr_register(void)
 {
-	return mgmt_group_register(&conf_nmgr_group);
+	mgmt_register_group(&conf_nmgr_group);
 }
-#endif
