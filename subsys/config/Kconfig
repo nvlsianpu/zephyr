@@ -9,7 +9,6 @@ menuconfig CFGSYS
 	default n
 	prompt "Enable nonvolatile configuration system"
 	depends on FILE_SYSTEM_NFFS || FCB
-	select NEWLIB_LIBC
 	select MBEDTLS
 	help
 	  need text for help

@@ -24,6 +24,9 @@ sys_slist_t conf_handlers;
 
 static u8_t conf_cmd_inited;
 
+static void s64_to_dec(char *ptr, int buf_len, s64_t value, int base);
+static s64_t dec_to_s64(char *p_str, char **e_ptr);
+
 void conf_init(void)
 {
 	sys_slist_init(&conf_handlers);
@@ -62,18 +65,26 @@ struct conf_handler *conf_handler_lookup(char *name)
  */
 int conf_parse_name(char *name, int *name_argc, char *name_argv[])
 {
-	char *tok;
-	char *tok_ptr;
-	char *sep = CONF_NAME_SEPARATOR;
-	int i;
+	int i = 0;
 
-	tok = strtok_r(name, sep, &tok_ptr);
+	while (name) {
+		name_argv[i++] = name;
 
-	i = 0;
-	while (tok) {
-		name_argv[i++] = tok;
-		tok = strtok_r(NULL, sep, &tok_ptr);
+		while (1) {
+			if (*name == '\0') {
+				name = NULL;
+				break;
+			}
+
+			if (*name == *CONF_NAME_SEPARATOR) {
+				*name = '\0';
+				name++;
+				break;
+			}
+			name++;
+		}
 	}
+
 	*name_argc = i;
 
 	return 0;
@@ -130,7 +141,7 @@ int conf_value_from_str(char *val_str, enum conf_type type, void *vp,
 		}
 		break;
 	case CONF_INT64:
-		val64 = strtoll(val_str, &eptr, 0);
+		val64 = dec_to_s64(val_str, &eptr);
 		if (*eptr != '\0') {
 			goto err;
 		}
@@ -165,7 +176,7 @@ int conf_bytes_from_str(char *val_str, void *vp, int *len)
 	*len = rc;
 	return 0;
 }
-void s64_to_dec(char *ptr, int buf_len, s64_t value, int base);
+
 char *conf_str_from_value(enum conf_type type, void *vp, char *buf,
 			  int buf_len)
 {
@@ -198,7 +209,7 @@ char *conf_str_from_value(enum conf_type type, void *vp, char *buf,
 	}
 }
 
-void u64_to_dec(char *ptr, int buf_len, u64_t value, int base)
+static void u64_to_dec(char *ptr, int buf_len, u64_t value, int base)
 {
 	u64_t t = 0, res = 0;
 	u64_t tmp = value;
@@ -232,7 +243,7 @@ void u64_to_dec(char *ptr, int buf_len, u64_t value, int base)
 	} while (value != 0);
 }
 
-void s64_to_dec(char *ptr, int buf_len, s64_t value, int base)
+static void s64_to_dec(char *ptr, int buf_len, s64_t value, int base)
 {
 	u64_t val64;
 
@@ -250,6 +261,48 @@ void s64_to_dec(char *ptr, int buf_len, s64_t value, int base)
 	}
 
 	u64_to_dec(ptr, buf_len, val64, base);
+}
+
+static s64_t dec_to_s64(char *p_str, char **e_ptr)
+{
+	u64_t val = 0, prev_val = 0;
+	bool neg = false;
+	int digit;
+
+	if (*p_str == '-') {
+		neg = true;
+		p_str++;
+	} else if (*p_str == '+') {
+		p_str++;
+	}
+
+	while (1) {
+		if (*p_str >= '0' && *p_str <= '9') {
+			digit = *p_str - '0';
+		} else {
+			break;
+		}
+
+		val *= 10;
+		val += digit;
+
+		/* this is only a fuse */
+		if (val < prev_val) {
+			break;
+		}
+
+		prev_val = val;
+		p_str++;
+	}
+
+	if (e_ptr != 0)
+		*e_ptr = p_str;
+
+	if (neg) {
+		return -val;
+	} else {
+		return val;
+	}
 }
 
 char *conf_str_from_bytes(void *vp, int vp_len, char *buf, int buf_len)
