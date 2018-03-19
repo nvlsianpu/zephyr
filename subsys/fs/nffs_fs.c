@@ -495,9 +495,12 @@ static int nffs_statvfs(struct fs_mount_t *mountp,
 	return -ENOTSUP;
 }
 
-int nffs_rename(struct fs_mount_t *mountp, const char *from, const char *to)
+static int nffs_rename(struct fs_mount_t *mountp, const char *from,
+		       const char *to)
 {
 	int rc;
+
+	ARG_UNUSED(mountp);
 
 	k_mutex_lock(&nffs_lock, K_FOREVER);
 

@@ -279,6 +279,18 @@ static int fatfs_statvfs(struct fs_mount_t *mountp,
 	return translate_error(res);
 }
 
+static int fatfs_rename(struct fs_mount_t *mountp, const char *from,
+			const char *to)
+{
+	FRESULT res;
+
+	ARG_UNUSED(mountp);
+
+	res = f_rename(from, to);
+
+	return translate_error(res);
+}
+
 static int fatfs_mount(struct fs_mount_t *mountp)
 {
 	FRESULT res;
@@ -316,6 +328,7 @@ static struct fs_file_system_t fatfs_fs = {
 	.closedir = fatfs_closedir,
 	.mount = fatfs_mount,
 	.unlink = fatfs_unlink,
+	.rename = fatfs_rename,
 	.mkdir = fatfs_mkdir,
 	.stat = fatfs_stat,
 	.statvfs = fatfs_statvfs,
