@@ -8,7 +8,7 @@ menuconfig CFGSYS
 	bool
 	default n
 	prompt "Enable nonvolatile configuration system"
-	depends on FILE_SYSTEM_NFFS || FCB
+	depends on FILE_SYSTEM || FCB
 	select MBEDTLS
 	help
 	  need text for help
