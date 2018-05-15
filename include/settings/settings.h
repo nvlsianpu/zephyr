@@ -8,6 +8,7 @@
 #ifndef ZEPHYR_INCLUDE_SETTINGS_SETTINGS_H_
 #define ZEPHYR_INCLUDE_SETTINGS_SETTINGS_H_
 
+#include <sys/types.h>
 #include <misc/util.h>
 #include <misc/slist.h>
 #include <stdint.h>
@@ -34,30 +35,6 @@ extern "C" {
 #define SETTINGS_NMGR_OP		0
 
 /**
- * Type of settings value.
- */
-enum settings_type {
-	SETTINGS_NONE = 0,
-	SETTINGS_INT8,
-	SETTINGS_INT16,
-	SETTINGS_INT32,
-	SETTINGS_INT64,
-	SETTINGS_STRING,
-	SETTINGS_BYTES,
-	SETTINGS_FLOAT,
-	SETTINGS_DOUBLE,
-	SETTINGS_BOOL,
-} __attribute__((__packed__));
-
-/**
- * Parameter to commit handler describing where data is going to.
- */
-enum settings_export_tgt {
-	SETTINGS_EXPORT_PERSIST,        /* Value is to be persisted. */
-	SETTINGS_EXPORT_SHOW            /* Value is to be displayed. */
-};
-
-/**
  * @struct settings_handler
  * Config handlers for subtree implement a set of handler functions.
  * These are registered using a call to settings_register().
@@ -76,7 +53,8 @@ enum settings_export_tgt {
  * @param settings_handler::h_set Set value handler of settings items
  * identified by keyword names. Parameters:
  *  - argc - count of item in argv, argv - array of pointers to keyword names.
- *  - val- pointer to value to be set.
+ *  - value_ctx - pointer to the value contex which is used paramiter for data
+ *   extracting routine (@ref settings_val_read_cb).
  *
  * @param settings_handler::h_commit This handler gets called after settings
  * has been loaded in full. User might use it to apply setting to
@@ -98,11 +76,11 @@ enum settings_export_tgt {
 struct settings_handler {
 	sys_snode_t node;
 	char *name;
-	char *(*h_get)(int argc, char **argv, char *val, int val_len_max);
-	int (*h_set)(int argc, char **argv, char *val);
+	int (*h_get)(int argc, char **argv, char *val, int val_len_max);
+	int (*h_set)(int argc, char **argv, void *value_ctx);
 	int (*h_commit)(void);
-	int (*h_export)(int (*export_func)(const char *name, char *val),
-			enum settings_export_tgt tgt);
+	int (*h_export)(int (*export_func)(const char *name, void *val,
+					   size_t val_len));
 };
 
 /**
@@ -151,7 +129,7 @@ int settings_save(void);
  *
  * @return 0 on success, non-zero on failure.
  */
-int settings_save_one(const char *name, char *var);
+int settings_save_one(const char *name, void *value, size_t val_len);
 
 /**
  * Set settings item identified by @p name to be value @p val_str.
@@ -160,16 +138,17 @@ int settings_save_one(const char *name, char *var);
  *
  * @param name Name/key of the settings item.
  * @param val_str Value of the settings item.
+ * @param len Length of value string.
  *
  * @return 0 on success, non-zero on failure.
  */
-int settings_set_value(char *name, char *val_str);
+int settings_set_value(char *name, void *val_str, size_t len);
 
 /**
  * Get value of settings item identified by @p name.
  * This calls the settings handler h_get for the subtree.
  *
- * Configuration handler can copy the string to @p buf, the maximum
+ * Configuration handler should copy the string to @p buf, the maximum
  * number of bytes it will copy is limited by @p buf_len.
  *
  * @param name Name/key of the settings item.
@@ -179,10 +158,9 @@ int settings_set_value(char *name, char *val_str);
  *
  * @param buf_len size of buf.
  *
- * @return value will be pointer to beginning of the buf,
- * except for string it will pointer to beginning of string source.
+ * @return Positive: Length of copied dat. Negative: -ERCODE
  */
-char *settings_get_value(char *name, char *buf, int buf_len);
+int settings_get_value(char *name, char *buf, int buf_len);
 
 /**
  * Call commit for all settings handler. This should apply all
@@ -195,60 +173,20 @@ char *settings_get_value(char *name, char *buf, int buf_len);
 int settings_commit(char *name);
 
 /**
- * Convenience routine for converting value passed as a string to native
- * data type.
+ * Persistent data extracting routine.
+ * 
+ * This function read and decode data from non volatile storage to user buffer
+ * This function should be used inside set handler in order to read the settings
+ * data from backend storage.
  *
- * @param val_str Value of the settings item as string.
- * @param type Type of the value to convert to.
- * @param vp Pointer to variable to fill with the decoded value.
- * @param maxlen the vp buffer size.
+ * @param[in] value_ctx Data contex provided by the <p>h_set</p> handler.
+ * @param[out] buf Buffer for data read.
+ * @param[in] len Length of <p>buf</p>.
  *
- * @return 0 on success, non-zero on failure.
+ * @retval Negative value on failure. 0 and positive: Length of data loaded to
+ * the <p>buf</p>.
  */
-int settings_value_from_str(char *val_str, enum settings_type type, void *vp,
-			    int maxlen);
-
-/**
- * Convenience routine for converting byte array passed as a base64
- * encoded string.
- *
- * @param val_str Value of the settings item as string.
- * @param vp Pointer to variable to fill with the decoded value.
- * @param len Size of that variable. On return the number of bytes in the array.
- *
- * @return 0 on success, non-zero on failure.
- */
-int settings_bytes_from_str(char *val_str, void *vp, int *len);
-
-/**
- * Convenience routine for converting native data type to a string.
- *
- * @param type Type of the value to convert from.
- * @param vp Pointer to variable to convert.
- * @param buf Buffer where string value will be stored.
- * @param buf_len Size of the buffer.
- *
- * @return 0 on success, non-zero on failure.
- */
-char *settings_str_from_value(enum settings_type type, void *vp, char *buf,
-			      int buf_len);
-#define SETTINGS_STR_FROM_BYTES_LEN(len) (((len) * 4 / 3) + 4)
-
-/**
- * Convenience routine for converting byte array into a base64
- * encoded string.
- *
- * @param vp Pointer to variable to convert.
- * @param vp_len Number of bytes to convert.
- * @param buf Buffer where string value will be stored.
- * @param buf_len Size of the buffer.
- *
- * @return 0 on success, non-zero on failure.
- */
-char *settings_str_from_bytes(void *vp, int vp_len, char *buf, int buf_len);
-
-#define SETTINGS_VALUE_SET(str, type, val)                                  \
-	settings_value_from_str((str), (type), &(val), sizeof(val))
+int settings_val_read_cb(void *value_ctx, void *buf, size_t len);
 
 /**
  * @} settings
