@@ -6,3 +6,7 @@
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include "mcuboot.overlay"
 #endif
+
+#ifdef CONFIG_FLASH_SIMULATOR
+#include "sim-flash.overlay"
+#endif

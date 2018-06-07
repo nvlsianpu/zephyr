@@ -1,0 +1,13 @@
+/*
+ * Basic Device Tree overlay file for simulated flash.
+ * Automatically pulled in when CONFIG_FLASH_SIMULATOR is set.
+ */
+
+/ {
+#if CONFIG_FLASH_SIMULATOR
+	sim_flash: sim-flash@0 {
+		compatible = "sim-flash";
+		label = "FLASH_SIMULATOR";
+	};
+#endif
+};

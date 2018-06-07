@@ -1,0 +1,166 @@
+# Kconfig - Flash simulator config
+#
+# Copyright (c) 2018 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig FLASH_SIMULATOR
+	bool
+	prompt "Flash simulator"
+	default n
+	depends on FLASH
+	select STATS
+	select STATS_NAMES
+	select MULTITHREADING
+	select FLASH_HAS_PAGE_LAYOUT
+	select FLASH_HAS_DRIVER_ENABLED
+	help
+	  Enable the flash simulator.
+
+if FLASH_SIMULATOR
+
+config FLASH_SIMULATOR_BASE_OFFSET
+	hex
+	prompt "Base offset of the flash"
+	default 0x00
+	help
+	 The base offset of the flash.
+	 The address space of the simulated flash ranges from this value
+	 to this value plus FLASH_SIMULATOR_ERASE_UNIT * FLASH_SIMULATOR_FLASH_SIZE.
+
+config FLASH_SIMULATOR_ERASE_UNIT
+	int
+	prompt "Erase unit size in bytes"
+	default 4096
+	range 1 65536
+	help
+	 The smallest area of flash memory that can be indipendently erased.
+
+config FLASH_SIMULATOR_PROG_UNIT
+	int
+	prompt "Program unit size in bytes"
+	default 4
+	range 1 4096
+	help
+	 The smallest area of flash memory that can be indipendently programmed.
+
+config FLASH_SIMULATOR_FLASH_SIZE
+	int
+	prompt "Flash size in erase units"
+	default 4
+	range 1 65536
+	help
+	 The size of the simulated flash area expressed in erase units.
+
+config FLASH_SIMULATOR_DOUBLE_WRITES
+	bool
+	prompt "Allow program units to be programmed more than once"
+	default y
+	help
+	 If selected, writing to a non-erased program unit will succeed, otherwise, it will return an error.
+	 Keep in mind that write operations can only pull bits to zero, regardless.
+
+config FLASH_SIMULATOR_ERASE_PROTECT
+	bool
+	prompt "Enable erase protection on write protection"
+	default y
+	help
+	 If selected, turning on write protection will also prevent erasing.
+
+config FLASH_SIMULATOR_SIMULATE_FAILURES
+	bool
+	prompt "Enable failure simulation"
+	help
+	 This setting enables simulation of various API and hardware failures,
+	 which can be used for testing.
+
+if FLASH_SIMULATOR_SIMULATE_FAILURES
+
+config FLASH_SIMULATOR_MAX_ERASE_CYCLES
+	int
+	prompt "Maximum number of erase cycles"
+	default 10000
+	help
+	 Number of erase cycles after which an erase unit can no longer be reliably erased or read.
+	 Upon reaching a unit's erase cycles limit, further erase operations will leave a random area
+	 within the unit filled with a specific byte pattern (other than 0xFF). Additionally, read
+	 operations on a worn out unit will be unreliable, consistently flipping one random byte.
+
+config FLASH_SIMULATOR_READ_FAILURE_RATE_PM
+	int
+	prompt "Read failure rate ‰ (per mille)"
+	default 0
+	range 0 1000
+	help
+	 This setting controls the failure rate during read operations in units of 1/1000.
+	 A failure during read will not produce an API error, instead, the output buffer will be filled
+	 with the requested amount of data copied from flash, then one byte at random will be flipped.
+
+ config FLASH_SIMULATOR_WRITE_FAILURE_RATE_PM
+	int
+	prompt "Write failure rate ‰ (per mille)"
+	default 0
+	range 0 1000
+	help
+	 This setting controls the failure rate during write operations in units of 1/1000.
+	 This setting can be used to simulate power-loss scenarios.
+	 A failure during write will toggle one random byte in flash; no API errors are returned.
+
+config FLASH_SIMULATOR_ERASE_FAILURE_RATE_PM
+	int
+	prompt "Erase failure rate ‰ (per mille)"
+	default 0
+	range 0 1000
+	help
+	 This setting controls the failure rate during erase operations in units of 1/1000.
+	 This setting can be used to simulate power-loss scenarios.
+	 A failure during erase will fill a random area within the erase unit with specific byte pattern
+	 (other than 0xFF); no API errors are returned. If an erase operation involves more than one unit,
+	 each unit is erased individually.
+
+config FLASH_SIMULATOR_MAX_ERASE_CYCLES_PATTERN
+	hex
+	prompt "Byte pattern on erase cycle limit"
+	range 0x00 0xFE
+	default 0xA5
+	help
+	 This pattern is used to fill a random area within a unit that is being erased
+	 after this has exceeded its erase cycle limit.
+
+config FLASH_SIMULATOR_ERASE_FAILURE_PATTERN
+	hex
+	prompt "Byte pattern on failure during erase"
+	range 0x00 0xFE
+	default 0xA5
+	help
+	 When an error occurs during erase operations,
+	 this pattern is used to fill a random area within the unit being erased.
+
+endif # FLASH_SIMULATOR_SIMULATE_FAILURES
+
+config FLASH_SIMULATOR_SIMULATE_TIMING
+	bool
+	prompt "Enable hardware timing simulation"
+
+if FLASH_SIMULATOR_SIMULATE_TIMING
+
+config FLASH_SIMULATOR_MIN_READ_TIME_US
+	int
+	prompt "Minimum read time (µS)"
+	default 2
+	range 1 1000000
+
+config FLASH_SIMULATOR_MIN_WRITE_TIME_US
+	int
+	prompt "Minimum write time (µS)"
+	default 100
+	range 1 1000000
+
+config FLASH_SIMULATOR_MIN_ERASE_TIME_US
+	int
+	prompt "Minimum erase time (µS)"
+	default 2000
+	range 1 1000000
+
+endif
+
+endif # FLASH_SIMULATOR

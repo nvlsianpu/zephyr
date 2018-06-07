@@ -1,0 +1,9 @@
+/* This file is a temporary workaround for mapping of the generated information
+ * to the current driver definitions.  This will be removed when the drivers
+ * are modified to handle the generated information, or the mapping of
+ * generated data matches the driver definitions.
+ */
+
+#if CONFIG_FLASH_SIMULATOR
+#define SIM_FLASH_DEV_NAME			SIM_FLASH_0_LABEL
+#endif
