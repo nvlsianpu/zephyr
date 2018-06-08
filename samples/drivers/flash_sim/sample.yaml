@@ -1,0 +1,12 @@
+sample:
+  name: Flash simulator
+tests:
+  test:
+    platform_whitelist: qemu_x86 qemu_cortex_m3
+    tags: simulator
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "All tests completed."
+
