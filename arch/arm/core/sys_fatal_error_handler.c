@@ -41,6 +41,8 @@
 void __weak _SysFatalErrorHandler(unsigned int reason,
 					 const NANO_ESF *pEsf)
 {
+	k_call_stacks_analyze();
+	printk("sys_fata\n");
 	ARG_UNUSED(pEsf);
 
 #if !defined(CONFIG_SIMPLE_FATAL_ERROR_HANDLER)
@@ -67,7 +69,7 @@ hang_system:
 #endif
 
 	for (;;) {
-		k_cpu_idle();
+		//k_cpu_idle();
 	}
 	CODE_UNREACHABLE;
 }

@@ -60,7 +60,7 @@ void _new_thread(struct k_thread *thread, k_thread_stack_t *stack,
 {
 	char *pStackMem = K_THREAD_STACK_BUFFER(stack);
 
-	_ASSERT_VALID_PRIO(priority, pEntry);
+	_ASSERT_VALID_PRIO(priority, pEntry); //
 
 #if CONFIG_MPU_REQUIRES_POWER_OF_TWO_ALIGNMENT
 	char *stackEnd = pStackMem + stackSize - MPU_GUARD_ALIGN_AND_SIZE;
