@@ -545,10 +545,17 @@ def generate_node_definitions():
         if k in chosen:
             extract_string_prop(chosen[k], "label", v)
 
-    node_address = chosen.get('zephyr,flash', 'dummy-flash')
-    flash.extract(node_address, 'zephyr,flash', 'FLASH')
-    node_address = chosen.get('zephyr,code-partition', node_address)
+    flash_node_address = chosen.get('zephyr,flash', 'dummy-flash')
+    flash.extract(flash_node_address,  'zephyr,flash', 'FLASH')
+    node_address = chosen.get('zephyr,code-partition', flash_node_address)
     flash.extract(node_address, 'zephyr,code-partition', 'FLASH')
+    flash_map = chosen.get('zephyr,flash_map', flash_node_address)
+
+    if isinstance(flash_map, str):
+        flash_map = flash_map.split("\\0")
+
+    for node_address in flash_map:
+        flash.extract(node_address, 'zephyr,flash_map', 'FLASH_DEV')
 
     return defs
 
