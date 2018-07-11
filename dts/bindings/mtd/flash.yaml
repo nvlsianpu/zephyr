@@ -1,0 +1,24 @@
+#
+# Copyright (c) 2018, Findlay Feng
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+---
+title: FLASH Base Structure
+id: flash
+version: 0.1
+
+description: >
+    This binding gives the base structures for all FLASH devices
+
+properties:
+    label:
+      type: string
+      category: optional
+      description: Human readable string describing the device (used by Zephyr for API name)
+      generation: define
+
+base_label: FLASH
+use-property-label: yes
+
+...
