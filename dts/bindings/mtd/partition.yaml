@@ -37,6 +37,11 @@ properties:
             description: Denotes read only partition
             generation: define
 
+          controller:
+            type: compound
+            category: required
+            generation: define
+
 base_label: FLASH_AREA
 use-property-label: yes
 
