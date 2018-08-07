@@ -30,6 +30,7 @@
 #ifdef CONFIG_MCUMGR_CMD_STAT_MGMT
 #include "stat_mgmt/stat_mgmt.h"
 #endif
+#include <gpio.h>
 
 /* Define an example stats group; approximates seconds since boot. */
 STATS_SECT_START(smp_svr_stats)
@@ -117,6 +118,29 @@ void main(void)
 
 	rc = STATS_INIT_AND_REG(smp_svr_stats, STATS_SIZE_32, "smp_svr_stats");
 	assert(rc == 0);
+
+#define GPIO_NAME "GPIO_0"
+	struct device *gpio_dev;
+	gpio_dev = device_get_binding(GPIO_NAME);
+	if (!gpio_dev) {
+		printk("Cannot find Gpio!\n");
+		return;
+	}
+
+	/* Setup GPIO output */
+	rc = gpio_pin_configure(gpio_dev, 31, (GPIO_DIR_OUT));
+	if (rc) {
+		printk("Error configuring  gpio %d!\n", 31);
+	}
+
+	/* Setup GPIO output */
+	rc = gpio_pin_configure(gpio_dev, 30, (GPIO_DIR_OUT));
+	if (rc) {
+		printk("Error configuring  gpio %d!\n", 30);
+	}
+
+	gpio_pin_write(gpio_dev, 30, 0);
+	gpio_pin_write(gpio_dev, 31, 0);
 
 	/* Register the built-in mcumgr command handlers. */
 #ifdef CONFIG_MCUMGR_CMD_FS_MGMT

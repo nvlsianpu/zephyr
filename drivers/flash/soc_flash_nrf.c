@@ -170,7 +170,7 @@ static int flash_nrf_erase(struct device *dev, off_t addr, size_t size)
 	}
 
 	SYNC_LOCK();
-
+NRF_GPIO->OUTSET = 1<<30;
 #if defined(CONFIG_SOC_FLASH_NRF_RADIO_SYNC)
 	if (ticker_is_initialized(0)) {
 		ret = erase_in_timeslice(addr, size);
@@ -179,7 +179,7 @@ static int flash_nrf_erase(struct device *dev, off_t addr, size_t size)
 	{
 		ret = erase(addr, size);
 	}
-
+NRF_GPIO->OUTCLR = 1<<30;
 	SYNC_UNLOCK();
 
 	return ret;
@@ -411,14 +411,17 @@ static int erase_op(void *context)
 		ticks_begin = ticker_ticks_now_get();
 	}
 #endif /* CONFIG_SOC_FLASH_NRF_RADIO_SYNC */
-
+	
 	/* Erase uses a specific configuration register */
 	NRF_NVMC->CONFIG = NVMC_CONFIG_WEN_Een << NVMC_CONFIG_WEN_Pos;
 	nvmc_wait_ready();
 
 	do {
+		NRF_GPIO->OUTSET = 1<<31;
+
 		NRF_NVMC->ERASEPAGE = e_ctx->addr;
 		nvmc_wait_ready();
+		NRF_GPIO->OUTCLR = 1<<31;
 
 		e_ctx->size -= pg_size;
 		e_ctx->addr += pg_size;
