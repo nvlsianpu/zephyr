@@ -1,0 +1,47 @@
+/*
+ * Basic Device Tree overlay file for chain-loading by MCUboot.
+ * Automatically pulled in when CONFIG_BOOTLOADER_MCUBOOT is set.
+ */
+
+/ {
+
+
+	chosen {
+		zephyr,flash = &flash0;
+		zephyr,flash_map = &flash0, &flash1;
+	};
+
+	flash-controller2@7001E000 {
+			compatible = "turbo,turbo-flash-controller";
+			reg = <0x7001E000 0x550>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			label="EXT_FLASH_DRV_NAME";
+
+			flash1: flash@0 {
+				compatible = "serial-flash";
+				label = "SERIAL_FLASH";
+				erase-block-size = <4096>;
+				write-block-size = <4>;
+			};
+	};
+};
+
+&flash1 {
+	/*
+	 * For more information, see:
+	 * http://docs.zephyrproject.org/latest/devices/dts/flash_partitions.html
+	 */
+	partitions {
+		compatible = "fixed-partitions";
+		#address-cells = <1>;
+		#size-cells = <1>;
+
+		external_partition: partition@0 {
+			label = "external";
+			reg = <0x000000000 0x00002000>;
+		};
+	};
+};
