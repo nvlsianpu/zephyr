@@ -26,7 +26,7 @@ elseif(BOARD STREQUAL nrf52_pca10040)
     )
 elseif(BOARD STREQUAL nrf52840_pca10056)
     zephyr_compile_definitions(
-        -DTEST_FLASH_OFFSET=0x20000
+        -DTEST_FLASH_OFFSET=0x30000
     )
 endif()
 
