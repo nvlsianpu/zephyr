@@ -267,13 +267,9 @@ u8_t flash_area_align(const struct flash_area *fa)
 	return flash_get_write_block_size(dev);
 }
 
-int flash_area_has_driver(const struct flash_area *fa)
+struct device *flash_area_get_driver(const struct flash_area *fa)
 {
-	if (get_flash_dev_from_id(fa->fa_device_id) == NULL) {
-		return -ENODEV;
-	}
-
-	return 1;
+	return get_flash_dev_from_id(fa->fa_device_id);
 }
 
 static int flash_map_init(struct device *dev)
