@@ -70,18 +70,18 @@ static int apds9960_sample_fetch(struct device *dev, enum sensor_channel chan)
 	}
 
 	LOG_DBG("status: 0x%x", status);
-	if (status & APDS9960_STATUS_PINT) {
-		if (i2c_reg_read_byte(data->i2c, APDS9960_I2C_ADDRESS,
-				      APDS9960_PDATA_REG, &data->pdata)) {
-			return -EIO;
-		}
-	}
+//	if (status & APDS9960_STATUS_PINT) {
+//		if (i2c_reg_read_byte(data->i2c, APDS9960_I2C_ADDRESS,
+//				      APDS9960_PDATA_REG, &data->pdata)) {
+//			return -EIO;
+//		}
+//	}
 
 	if (status & APDS9960_STATUS_AINT) {
 		if (i2c_burst_read(data->i2c, APDS9960_I2C_ADDRESS,
 				   APDS9960_CDATAL_REG,
 				   (u8_t *)&data->sample_crgb,
-				   sizeof(data->sample_crgb))) {
+				   sizeof(data->sample_crgb[0]))) {
 			return -EIO;
 		}
 
@@ -317,10 +317,10 @@ static int apds9960_sensor_setup(struct device *dev)
 		return -EIO;
 	}
 
-	if (apds9960_proxy_setup(dev, APDS9960_DEFAULT_PGAIN)) {
-		LOG_ERR("Failed to setup proximity functionality");
-		return -EIO;
-	}
+//	if (apds9960_proxy_setup(dev, APDS9960_DEFAULT_PGAIN)) {
+//		LOG_ERR("Failed to setup proximity functionality");
+//		return -EIO;
+//	}
 
 	if (apds9960_ambient_setup(dev, APDS9960_DEFAULT_AGAIN)) {
 		LOG_ERR("Failed to setup ambient light functionality");

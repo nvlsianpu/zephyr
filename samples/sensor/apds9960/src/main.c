@@ -57,23 +57,26 @@ void main(void)
 		return;
 	}
 #endif
-
+	//int cnt = 0;
 	while (true) {
 #ifdef CONFIG_APDS9960_TRIGGER
 		printk("Waiting for a threshold event\n");
 		k_sem_take(&sem, K_FOREVER);
 #else
-		k_sleep(5000);
+		//k_sleep(50);
 #endif
+
 		if (sensor_sample_fetch(dev)) {
 			printk("sensor_sample fetch failed\n");
 		}
 
-		sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &intensity);
-		sensor_channel_get(dev, SENSOR_CHAN_PROX, &pdata);
 
-		printk("ambient light intensity %d, proximity %d\n",
-		       intensity.val1, pdata.val1);
+		sensor_channel_get(dev, SENSOR_CHAN_LIGHT, &intensity);
+		//	sensor_channel_get(dev, SENSOR_CHAN_PROX, &pdata);
+
+		//printk("ambient light intensity %d, proximity %d\n",
+		//       intensity.val1, pdata.val1);
+		printk("%d\n", intensity.val1);
 
 #ifdef CONFIG_DEVICE_POWER_MANAGEMENT
 		u32_t p_state;
