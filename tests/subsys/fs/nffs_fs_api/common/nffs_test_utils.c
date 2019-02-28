@@ -234,8 +234,15 @@ void nffs_test_util_create_file_blocks(const char *filename,
 	int rc;
 	int i;
 
-	/* We do not have 'truncate' flag in fs_open, so unlink here instead */
-	fs_unlink(filename);
+	struct fs_dirent entry;
+
+	rc = fs_stat(filename, &entry);
+	if (rc == 0) {
+		/* We do not have 'truncate' flag in fs_open, so unlink here instead */
+		fs_unlink(filename);
+	} else {
+		zassert_equal(rc, -ENOENT, NULL);	
+	}
 
 	rc = fs_open(&file, filename);
 	zassert_equal(rc, 0, NULL);
@@ -341,14 +348,18 @@ void nffs_test_util_create_subtree(const char *parent_path,
 		path = k_malloc(strlen(parent_path) + strlen(elem->filename) + 2);
 		zassert_not_null(path, NULL);
 
-		sprintf(path, "%s/%s", parent_path, elem->filename);
+		if (*elem->filename == '\0') {
+			strcpy(path, parent_path);
+		} else {
+			sprintf(path, "%s/%s", parent_path, elem->filename);
+		}
 	}
 
 	if (elem->is_dir) {
 		if ((parent_path != NULL) &&
-				(strlen(parent_path) > strlen(NFFS_MNTP))) {
+				(strlen(/*parent_*/path) > strlen(NFFS_MNTP))) {
 			rc = fs_mkdir(path);
-			zassert_equal(rc, 0, NULL);
+			zassert_equal(rc, 0, path);
 		}
 
 		if (elem->children != NULL) {
