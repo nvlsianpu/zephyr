@@ -536,9 +536,12 @@ static int nvs_startup(struct nvs_fs *fs)
 	 * Coverity and GCC believe the contrary.
 	 */
 	u32_t addr = 0U;
+	bool close_open_found = false;
 
 
 	k_mutex_lock(&fs->nvs_lock, K_FOREVER);
+
+	/* determine write sector or the most recent sector --> */
 
 	ate_size = nvs_al_size(fs, sizeof(struct nvs_ate));
 	/* step through the sectors to find the last sector */
@@ -553,14 +556,44 @@ static int nvs_startup(struct nvs_fs *fs)
 						  sizeof(struct nvs_ate));
 			if (!rc) {
 				/* open sector */
+				close_open_found = true;
 				break;
 			}
 		}
-		/* none of the sectors where closed, set the address to
-		 * the first sector
-		 */
-		nvs_sector_advance(fs, &addr);
 	}
+
+	if (close_open_found) {
+		if (fs->sector_count == 2) {
+			/* 2-sectors configuration is the specific one.
+			 * GC must have been interrupted
+			 * closed sector contains last valid data
+			 * write sector contains undone GC product
+			 */
+
+			/* Correct address of valid sector,
+			 * GC will be resumed
+			 */
+			nvs_sector_advance(fs, &addr);
+		}
+	} else {
+		if (fs->sector_count == 2) {
+			/* 2-sectors configuration is the specific one.
+			 * check whether write sector is not the scratch sector
+			 */
+			rc = nvs_flash_cmp_const(fs, addr - ate_size, 0xff,
+						 sizeof(struct nvs_ate));
+			if (!rc) {
+				/* Correct address of valid sector to sector 0
+				 */
+				nvs_sector_advance(fs, &addr);
+			}
+		} else {
+			/* correct address of valid sector to sector 0 */
+			nvs_sector_advance(fs, &addr);
+		}
+	}
+
+	/* addr contain address of the oldest ate in the most recent sector */
 	/* search for the first ate containing all 0xff) */
 	while (1) {
 		addr -= ate_size;
@@ -608,16 +641,29 @@ static int nvs_startup(struct nvs_fs *fs)
 		fs->data_wra += fs->write_block_size;
 	}
 
-	/* if the sector after the write sector is not empty gc was interrupted
-	 * we need to restart gc, first erase the sector before restarting gc
-	 * otherwise the data may not fit into the sector.
-	 */
+	/* Interrupted GC check & resume --> */
+
+	/* move addr to the next sector */
 	addr = fs->ate_wra & ADDR_SECT_MASK;
 	nvs_sector_advance(fs, &addr);
-	rc = nvs_flash_cmp_const(fs, addr, 0xff, fs->sector_size);
-	if (rc < 0) {
-		goto end;
+
+	if (fs->sector_count == 2) {
+		/* 2-sectors configuration is specific. Next sector is
+		 * the scratch sector even if it is empty.
+		 */
+		rc = (int)close_open_found;
+	} else {
+		/* if the sector after the write sector is not empty gc was
+		 * interrupted we need to restart gc, first erase the sector
+		 * before restarting gc otherwise the data may not fit into
+		 * the sector.
+		 */
+		rc = nvs_flash_cmp_const(fs, addr, 0xff, fs->sector_size);
+		if (rc < 0) {
+			goto end;
+		}
 	}
+
 	if (rc) {
 		/* the sector after fs->ate_wrt is not empty */
 		rc = nvs_flash_erase_sector(fs, fs->ate_wra);
