@@ -37,30 +37,42 @@
 
 #include <string.h>
 
-#ifdef CONFIG_CPU_CORTEX_M_HAS_VTOR
+
+#if defined(CONFIG_CPU_CORTEX_M_HAS_VTOR)
 
 #ifdef CONFIG_XIP
+#ifdef CONFIG_SW_VECTOR_RELAY
+#define VECTOR_ADDRESS ((uintptr_t)__vector_relay_table)
+#else
 #define VECTOR_ADDRESS ((uintptr_t)_vector_start)
-#else
+#endif
+#else /* CONFIG_XIP */
 #define VECTOR_ADDRESS CONFIG_SRAM_BASE_ADDRESS
-#endif
-static inline void relocate_vector_table(void)
-{
-	SCB->VTOR = VECTOR_ADDRESS & SCB_VTOR_TBLOFF_Msk;
-	__DSB();
-	__ISB();
-}
+#endif /* CONFIG_XIP */
 
-#else
-
-#if defined(CONFIG_SW_VECTOR_RELAY)
-Z_GENERIC_SECTION(.vt_pointer_section) void *_vector_table_pointer;
-#endif
+#else /* CONFIG_CPU_CORTEX_M_HAS_VTOR */
 
 #define VECTOR_ADDRESS 0
 
+#endif /* CONFIG_CPU_CORTEX_M_HAS_VTOR */
+
+#ifdef CONFIG_SW_VECTOR_RELAY
+Z_GENERIC_SECTION(.vt_pointer_section) void *_vector_table_pointer;
+#endif
+
+
+#ifdef CONFIG_CPU_CORTEX_M_HAS_VTOR
+static inline void relocate_vector_table(void)
+#else
 void __weak relocate_vector_table(void)
+#endif
 {
+#if defined(CONFIG_CPU_CORTEX_M_HAS_VTOR) && !defined(CONFIG_BOOTLOADER_MCUBOOT)
+	SCB->VTOR = VECTOR_ADDRESS & SCB_VTOR_TBLOFF_Msk;
+	__DSB();
+	__ISB();
+#endif
+#if !defined(CONFIG_CPU_CORTEX_M_HAS_VTOR) || defined(CONFIG_SW_VECTOR_RELAY)
 #if defined(CONFIG_XIP) && (CONFIG_FLASH_BASE_ADDRESS != 0) || \
     !defined(CONFIG_XIP) && (CONFIG_SRAM_BASE_ADDRESS != 0)
 	size_t vector_size = (size_t)_vector_end - (size_t)_vector_start;
@@ -68,13 +80,12 @@ void __weak relocate_vector_table(void)
 #elif defined(CONFIG_SW_VECTOR_RELAY)
 	_vector_table_pointer = _vector_start;
 #endif
+#endif /* !defined(CONFIG_CPU_CORTEX_M_HAS_VTOR) || defined(CONFIG_SW_VECTOR_RELAY) */
 }
 
 #if defined(__GNUC__)
 #pragma GCC diagnostic pop
 #endif
-
-#endif /* CONFIG_CPU_CORTEX_M_HAS_VTOR */
 
 #if defined(CONFIG_CPU_HAS_FPU)
 static inline void z_arm_floating_point_init(void)
