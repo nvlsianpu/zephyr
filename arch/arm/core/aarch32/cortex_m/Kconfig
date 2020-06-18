@@ -270,8 +270,13 @@ config SW_VECTOR_RELAY
 	default y if BOOTLOADER_MCUBOOT
 	depends on ARMV6_M_ARMV8_M_BASELINE && !(CPU_CORTEX_M0_HAS_VECTOR_TABLE_REMAP || CPU_CORTEX_M_HAS_VTOR)
 	help
-	  Add Vector Table relay handler and relay vector table, to
-	  relay interrupts based on a vector table pointer. This is only
+	  When building bootloader firmware this option adds a
+	  Vector Table relay handler and relay vector table, to
+	  relay interrupts based on a vector table pointer. When
+	  building a chain-loadable firmware, this option instructs
+	  the kernel to store a pointer to the vector table onto an
+	  address in RAM so it can be used by the bootloader fimrware
+	  yo implement the software vector relaying. This is only
 	  required for Cortex-M0 (or an Armv8-M baseline core) with no hardware
 	  vector table relocation mechanisms or for Cortex-M0+
 	  (or an Armv8-M baseline core) with no VTOR and no other hardware
