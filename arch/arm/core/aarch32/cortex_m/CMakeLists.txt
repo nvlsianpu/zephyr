@@ -13,19 +13,15 @@ zephyr_library_sources(
   thread_abort.c
   )
 
-# When CONFIG_BOOTLOADER_MCUBOOT is set the firmware image
-# is chain-loadable and does not need to forward interrupts.
-if(!CONFIG_BOOTLOADER_MCUBOOT)
-
 zephyr_linker_sources_ifdef(CONFIG_SW_VECTOR_RELAY
   ROM_START
   SORT_KEY 0x0relay_vectors
   relay_vector_table.ld
   )
 
-endif()
-
-zephyr_linker_sources_ifdef(CONFIG_SW_VECTOR_RELAY
+if (CONFIG_SW_VECTOR_RELAY OR CONFIG_SW_VECTOR_RELAY_CLIENT)
+zephyr_linker_sources(
   RAM_SECTIONS
   vt_pointer_section.ld
   )
+endif()
