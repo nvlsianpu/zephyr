@@ -1,0 +1,8 @@
+tests:
+  subsys.logging.log_backend_fs.autostart:
+    platform_allow: qemu_cortex_m0
+    tags: logging backend filesystem fs
+  subsys.logging.log_backend_fs.manual:
+    platform_allow: qemu_cortex_m0
+    tags: logging backend filesystem fs
+    extra_args: OVERLAY_CONFIG=boards/qemu_cortex_m0_man.conf
