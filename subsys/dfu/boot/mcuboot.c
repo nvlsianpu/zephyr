@@ -62,48 +62,6 @@ struct mcuboot_v1_raw_header {
 #define IMAGE_OK_OFFS(bank_area) ((bank_area)->fa_size - BOOT_MAGIC_SZ -\
 				  BOOT_MAX_ALIGN)
 
-static int boot_flag_offs(int flag, const struct flash_area *fa, uint32_t *offs)
-{
-	switch (flag) {
-	case BOOT_FLAG_IMAGE_OK:
-		*offs = IMAGE_OK_OFFS(fa);
-		return 0;
-	default:
-		return -ENOTSUP;
-	}
-}
-
-static int boot_flag_read(int flag, uint8_t bank_id)
-{
-	const struct flash_area *fa;
-	uint32_t offs;
-	int rc;
-	uint8_t flag_val;
-
-	rc = flash_area_open(bank_id, &fa);
-	if (rc) {
-		return rc;
-	}
-
-	rc = boot_flag_offs(flag, fa, &offs);
-	if (rc != 0) {
-		flash_area_close(fa);
-		return rc;
-	}
-
-	rc = flash_area_read(fa, offs, &flag_val, sizeof(flag_val));
-	if (rc != 0) {
-		return rc;
-	}
-
-	return flag_val;
-}
-
-static int boot_image_ok_read(uint8_t bank_id)
-{
-	return boot_flag_read(BOOT_FLAG_IMAGE_OK, bank_id);
-}
-
 static int boot_read_v1_header(uint8_t area_id,
 			       struct mcuboot_v1_raw_header *v1_raw)
 {
@@ -216,7 +174,21 @@ int boot_request_upgrade(int permanent)
 
 bool boot_is_img_confirmed(void)
 {
-	return boot_image_ok_read(FLASH_AREA_IMAGE_PRIMARY) == BOOT_FLAG_SET;
+	const struct flash_area *fa;
+	int rc;
+	uint8_t flag_val;
+
+	rc = flash_area_open(FLASH_AREA_IMAGE_PRIMARY, &fa);
+	if (rc) {
+		return false;
+	}
+
+	rc = boot_read_image_ok(fa, &flag_val);
+	if (rc) {
+		return false;
+	}
+
+	return flag_val == BOOT_FLAG_SET;
 }
 
 int boot_write_img_confirmed(void)
