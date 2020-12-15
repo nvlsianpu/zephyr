@@ -32,15 +32,4 @@
 #define BOOT_FLAG_UNSET 3
 #define BOOT_FLAG_ANY   4  /* NOTE: control only, not dependent on sector */
 
-/** Represents the management state of a single image slot. */
-struct boot_swap_state {
-	uint8_t magic;     /* One of the BOOT_MAGIC_[...] values. */
-	uint8_t swap_type; /* One of the BOOT_SWAP_TYPE_[...] values. */
-	uint8_t copy_done; /* One of the BOOT_FLAG_[...] values. */
-	uint8_t image_ok;  /* One of the BOOT_FLAG_[...] values. */
-};
-
-int
-boot_read_swap_state_by_id(int flash_area_id, struct boot_swap_state *state);
-
 #endif /* ZEPHYR_DFU_BOOT_MCUBOOT_H_ */
