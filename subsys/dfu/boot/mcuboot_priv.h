@@ -21,10 +21,6 @@
 #endif
 #endif /* CONFIG_TRUSTED_EXECUTION_NONSECURE */
 
-#if FLASH_AREA_LABEL_EXISTS(image_scratch)
-#define FLASH_AREA_IMAGE_SCRATCH FLASH_AREA_ID(image_scratch)
-#endif
-
 #define BOOT_MAGIC_GOOD    1
 #define BOOT_MAGIC_BAD     2
 #define BOOT_MAGIC_UNSET   3
