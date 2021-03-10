@@ -102,11 +102,10 @@ struct qspi_nor_data {
 	 */
 	volatile bool ready;
 #endif /* CONFIG_MULTITHREADING */
-	/* Indicates if write protection for flash device is
-	 * enabled.
-	 */
-	bool write_protection;
 };
+
+static int qspi_nor_write_protection_nop(const struct device *dev,
+					 bool write_protect);
 
 static inline int qspi_get_mode(bool cpol, bool cpha)
 {
@@ -419,6 +418,7 @@ static int qspi_erase(const struct device *dev, uint32_t addr, uint32_t size)
 	const struct qspi_nor_config *params = dev->config;
 
 	qspi_lock(dev);
+	rv = qspi_nor_write_protection_set(dev, false);
 	while ((rv == 0) && (size > 0)) {
 		nrfx_err_t res = !NRFX_SUCCESS;
 		uint32_t adj = 0;
@@ -452,7 +452,11 @@ static int qspi_erase(const struct device *dev, uint32_t addr, uint32_t size)
 			rv = qspi_get_zephyr_ret_code(res);
 		}
 	}
+	int rv2 = qspi_nor_write_protection_set(dev, true);
 
+	if (!rv) {
+		rv = rv2;
+	}
 	qspi_unlock(dev);
 
 	return rv;
@@ -865,10 +869,6 @@ static int qspi_nor_write(const struct device *dev, off_t addr,
 	struct qspi_nor_data *const driver_data = dev->data;
 	const struct qspi_nor_config *params = dev->config;
 
-	if (driver_data->write_protection) {
-		return -EACCES;
-	}
-
 	/* affected region should be within device */
 	if (addr < 0 ||
 	    (addr + size) > params->size) {
@@ -881,14 +881,21 @@ static int qspi_nor_write(const struct device *dev, off_t addr,
 	nrfx_err_t res = NRFX_SUCCESS;
 
 	qspi_lock(dev);
+	res = qspi_nor_write_protection_set(dev, false);
+	if (!res) {
+		if (size < 4U) {
+			res = write_sub_word(dev, addr, src, size);
+		} else if (!nrfx_is_in_ram(src)) {
+			res = write_from_nvmc(dev, addr, src, size);
+		} else {
+			res = nrfx_qspi_write(src, size, addr);
+			qspi_wait_for_completion(dev, res);
+		}
+	}
+	int res2 = qspi_nor_write_protection_set(dev, true);
 
-	if (size < 4U) {
-		res = write_sub_word(dev, addr, src, size);
-	} else if (!nrfx_is_in_ram(src)) {
-		res = write_from_nvmc(dev, addr, src, size);
-	} else {
-		res = nrfx_qspi_write(src, size, addr);
-		qspi_wait_for_completion(dev, res);
+	if (!res) {
+		res = res2;
 	}
 
 	qspi_unlock(dev);
@@ -900,10 +907,6 @@ static int qspi_nor_erase(const struct device *dev, off_t addr, size_t size)
 {
 	struct qspi_nor_data *const driver_data = dev->data;
 	const struct qspi_nor_config *params = dev->config;
-
-	if (driver_data->write_protection) {
-		return -EACCES;
-	}
 
 	/* affected region should be within device */
 	if (addr < 0 ||
@@ -919,17 +922,22 @@ static int qspi_nor_erase(const struct device *dev, off_t addr, size_t size)
 	return ret;
 }
 
+static int qspi_nor_write_protection_nop(const struct device *dev,
+					 bool write_protect)
+{
+	ARG_UNUSED(dev);
+	ARG_UNUSED(write_protect);
+
+	return 0;
+}
+
 static int qspi_nor_write_protection_set(const struct device *dev,
 					 bool write_protect)
 {
-	struct qspi_nor_data *const driver_data = dev->data;
-
 	int ret = 0;
 	struct qspi_cmd cmd = {
 		.op_code = ((write_protect) ? SPI_NOR_CMD_WRDI : SPI_NOR_CMD_WREN),
 	};
-
-	driver_data->write_protection = write_protect;
 
 	if (qspi_send_cmd(dev, &cmd, false) != 0) {
 		ret = -EIO;
@@ -1022,7 +1030,7 @@ static const struct flash_driver_api qspi_nor_api = {
 	.read = qspi_nor_read,
 	.write = qspi_nor_write,
 	.erase = qspi_nor_erase,
-	.write_protection = qspi_nor_write_protection_set,
+	.write_protection = qspi_nor_write_protection_nop,
 	.get_parameters = qspi_flash_get_parameters,
 #if defined(CONFIG_FLASH_PAGE_LAYOUT)
 	.page_layout = qspi_nor_pages_layout,
